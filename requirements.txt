@@ -1,5 +1,5 @@
 # BeautyFlow AI – dependencies
-# Grok API używa biblioteki openai (kompatybilny endpoint)
+# Grok API używa biblioteki openai (kompatybilny endpoint xAI)
 streamlit>=1.35.0
 openai>=1.30.0
 gspread>=6.1.0
