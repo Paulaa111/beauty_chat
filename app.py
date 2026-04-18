@@ -1,36 +1,32 @@
 # ============================================================
 # BeautyFlow AI – Asystent Kosmetyczny
-# Stack: Streamlit + Grok (xAI) + Google Sheets
+# Stack: Streamlit + Grok (xAI) + Google Sheets + Gmail SMTP
 # ============================================================
 #
-# STREAMLIT SECRETS – wklej to w App Settings → Secrets:
+# STREAMLIT SECRETS – wklej DOKŁADNIE TO w App Settings → Secrets:
 #
 # [app]
-# grok_api_key    = "xai-TWÓJ_KLUCZ"          ← z console.x.ai
+# grok_api_key    = "xai-TWÓJ_KLUCZ"        ← z console.x.ai
 # owner_password  = "TwojeHaslo123"
+# owner_email     = "wlascicielka@gmail.com" ← Twój email – tu przyjdzie powiadomienie
+#
+# [email]
+# gmail_user      = "twoj@gmail.com"         ← Gmail z którego wysyłasz
+# gmail_password  = "abcd efgh ijkl mnop"    ← App Password z myaccount.google.com
+#                                               → Bezpieczeństwo → Hasła do aplikacji
 #
 # [sheets]
-# sheet_id        = "ID_TWOJEGO_ARKUSZA"       ← z URL arkusza Google
+# sheet_id        = "ID_ARKUSZA_Z_URL"       ← docs.google.com/spreadsheets/d/[TU]/edit
 #
 # [gcp_service_account]
 # type            = "service_account"
 # project_id      = "beautyflow-ai"
-# private_key_id  = "abc123..."
+# private_key_id  = "..."
 # private_key     = "-----BEGIN RSA PRIVATE KEY-----\nMII...\n-----END RSA PRIVATE KEY-----\n"
 # client_email    = "beautyflow@beautyflow-ai.iam.gserviceaccount.com"
-# client_id       = "123456789"
+# client_id       = "..."
 # auth_uri        = "https://accounts.google.com/o/oauth2/auth"
 # token_uri       = "https://oauth2.googleapis.com/token"
-#
-# ──────────────────────────────────────────────────────────
-# GOOGLE SHEETS – jak ustawić arkusz i powiadomienia email:
-#
-# 1. Utwórz nowy arkusz: nazwij go "BeautyFlow Konsultacje"
-# 2. Skopiuj ID z URL: docs.google.com/spreadsheets/d/[TO_JEST_ID]/edit
-# 3. Udostępnij arkusz dla client_email z uprawnieniami Edytora
-# 4. POWIADOMIENIA EMAIL: w arkuszu → Narzędzia → Powiadomienia
-#    → "Gdy wprowadzane są zmiany" → "Od razu" → Twój email
-#    Dzięki temu Google automatycznie wyśle Ci email przy każdej nowej konsultacji!
 # ============================================================
 
 import streamlit as st
@@ -38,14 +34,16 @@ from openai import OpenAI
 import gspread
 from google.oauth2.service_account import Credentials
 from datetime import datetime
-import time
+import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 
 # ─────────────────────────────────────────────
 # PAGE CONFIG
 # ─────────────────────────────────────────────
 st.set_page_config(
     page_title="BeautyFlow AI",
-    page_icon="✦",
+    page_icon="🌸",
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -71,7 +69,7 @@ PROCEDURES = {
         ],
     },
     "Laminacja Rzęs": {
-        "emoji": "👁",
+        "emoji": "👁️",
         "tagline": "Naturalne podkręcenie na 6–8 tygodni",
         "time": "90 min",
         "price": "od 180 zł",
@@ -131,16 +129,17 @@ Rozmawiasz WYŁĄCZNIE po polsku. Jesteś ciepła, profesjonalna, nigdy nie uży
 Nie wymyślasz informacji spoza poniższej bazy. Jeśli pytanie wykracza poza bazę, odsyłasz do telefonu: +48 500 123 456.
 
 WAŻNE zasady prowadzenia rozmowy:
-- Klientka wybrała już zabieg z listy – wiesz o co chodzi, więc nie pytaj ponownie jaki zabieg ją interesuje.
-- Zadajesz pytania kwalifikujące STOPNIOWO – maksymalnie 1–2 naraz, naturalnie, jak w rozmowie.
-- Jeśli pojawia się przeciwwskazanie – delikatnie to sygnalizujesz i sugerujesz konsultację ze specjalistką.
+- Klientka wybrała już zabieg z listy – nie pytaj ponownie jaki zabieg ją interesuje.
+- Zadajesz pytania kwalifikujące STOPNIOWO – maksymalnie 1–2 naraz, naturalnie jak w rozmowie.
+- Jeśli pojawia się przeciwwskazanie – delikatnie sygnalizujesz i sugerujesz konsultację ze specjalistką.
 - Odpowiadasz na wszystkie pytania klientki korzystając z bazy poniżej.
-- Gdy klientka jest gotowa do rezerwacji – informujesz, że specjalistka oddzwoni w celu ustalenia terminu.
+- Pod koniec rozmowy zapytaj o imię i adres email klientki – powiedz że wyślemy podsumowanie na jej skrzynkę.
+- Gdy klientka poda email – powiedz że zaraz wyślemy podsumowanie i że specjalistka oddzwoni.
 - Bądź naturalna, ciepła, nie nudna.
 
 === BAZA ZABIEGÓW ===
 {chr(10).join([
-    f'''
+    f"""
 ZABIEG: {name}
 Tagline: {p["tagline"]}
 Czas: {p["time"]} | Cena: {p["price"]}
@@ -149,7 +148,7 @@ Efekty: {p["effects"]}
 Przeciwwskazania: {p["contraindications"]}
 Przygotowanie: {p["prep"]}
 Pytania kwalifikujące (zadawaj stopniowo): {" / ".join(p["questions"])}
-'''
+"""
     for name, p in PROCEDURES.items()
 ])}
 
@@ -166,7 +165,7 @@ Godziny: Pon–Pt 9:00–20:00, Sobota 9:00–16:00
 """
 
 # ─────────────────────────────────────────────
-# CSS – GRANAT / MAŚLANY ŻÓŁTY / BIEL
+# CSS
 # ─────────────────────────────────────────────
 def inject_css():
     st.markdown("""
@@ -180,32 +179,23 @@ def inject_css():
         --butter: #f5d776;
         --butter2:#e8c94e;
         --white:  #f8f4ed;
-        --white2: #ede8df;
         --muted:  rgba(248,244,237,0.55);
     }
-
     html, body, [data-testid="stAppViewContainer"] {
         background: var(--navy) !important;
         color: var(--white) !important;
         font-family: 'DM Sans', sans-serif !important;
     }
-
-    /* Sidebar */
     [data-testid="stSidebar"] {
         background: var(--navy2) !important;
         border-right: 1px solid rgba(245,215,118,0.15) !important;
     }
     [data-testid="stSidebar"] * { color: var(--white) !important; }
     [data-testid="stSidebar"] hr { border-color: rgba(245,215,118,0.15) !important; }
-
-    /* Headings */
     h1,h2,h3 {
         font-family: 'DM Serif Display', serif !important;
         color: var(--butter) !important;
-        letter-spacing: 0.01em;
     }
-
-    /* Chat bubbles */
     [data-testid="stChatMessage"] {
         background: var(--navy2) !important;
         border: 1px solid rgba(245,215,118,0.12) !important;
@@ -217,8 +207,6 @@ def inject_css():
         from { opacity:0; transform: translateY(8px); }
         to   { opacity:1; transform: translateY(0); }
     }
-
-    /* Chat input */
     [data-testid="stChatInputTextArea"] {
         background: var(--navy2) !important;
         color: var(--white) !important;
@@ -226,12 +214,6 @@ def inject_css():
         border-radius: 12px !important;
         font-family: 'DM Sans', sans-serif !important;
     }
-    [data-testid="stChatInputTextArea"]:focus {
-        border-color: var(--butter) !important;
-        box-shadow: 0 0 0 2px rgba(245,215,118,0.15) !important;
-    }
-
-    /* Buttons */
     .stButton > button {
         background: var(--butter) !important;
         color: var(--navy) !important;
@@ -239,7 +221,6 @@ def inject_css():
         border-radius: 10px !important;
         font-family: 'DM Sans', sans-serif !important;
         font-weight: 500 !important;
-        letter-spacing: 0.03em !important;
         font-size: 0.82rem !important;
         padding: 0.5rem 1.2rem !important;
         transition: all 0.2s ease !important;
@@ -249,9 +230,6 @@ def inject_css():
         transform: translateY(-1px) !important;
         box-shadow: 0 4px 16px rgba(245,215,118,0.25) !important;
     }
-    .stButton > button:active { transform: translateY(0) !important; }
-
-    /* Text inputs */
     .stTextInput > div > div > input {
         background: var(--navy2) !important;
         color: var(--white) !important;
@@ -259,26 +237,12 @@ def inject_css():
         border-radius: 8px !important;
         font-family: 'DM Sans', sans-serif !important;
     }
-    .stTextInput > div > div > input:focus {
-        border-color: var(--butter) !important;
-    }
-
-    /* Alerts / info */
-    .stAlert {
-        background: var(--navy2) !important;
-        border: 1px solid rgba(245,215,118,0.2) !important;
-        border-radius: 10px !important;
-        color: var(--white) !important;
-    }
-
-    /* Procedure cards */
     .proc-card {
         background: var(--navy2);
         border: 1px solid rgba(245,215,118,0.15);
         border-radius: 16px;
         padding: 1.1rem 1.3rem;
         margin-bottom: 0.6rem;
-        cursor: pointer;
         transition: all 0.2s ease;
         animation: fadeUp 0.4s ease forwards;
     }
@@ -292,8 +256,6 @@ def inject_css():
     .proc-card .card-title { font-family:'DM Serif Display',serif; color: var(--butter); font-size: 1.05rem; }
     .proc-card .card-tag   { font-size: 0.78rem; color: var(--muted); margin-top: 2px; }
     .proc-card .card-meta  { font-size: 0.76rem; color: var(--butter2); margin-top: 0.4rem; }
-
-    /* Promo pill */
     .promo-pill {
         display: inline-block;
         background: rgba(245,215,118,0.1);
@@ -304,24 +266,9 @@ def inject_css():
         color: var(--butter);
         margin: 0.15rem 0;
     }
-
-    /* Animated dots */
-    @keyframes bounce {
-        0%,80%,100% { transform:translateY(0); }
-        40%          { transform:translateY(-4px); }
-    }
-    .dot { display:inline-block; width:6px; height:6px; border-radius:50%;
-           background:var(--butter); margin:0 2px;
-           animation: bounce 1.0s infinite; }
-    .dot:nth-child(2){ animation-delay:.15s; }
-    .dot:nth-child(3){ animation-delay:.3s; }
-
-    /* Scrollbar */
+    hr { border-color: rgba(245,215,118,0.15) !important; }
     ::-webkit-scrollbar { width: 4px; }
-    ::-webkit-scrollbar-track { background: var(--navy); }
     ::-webkit-scrollbar-thumb { background: rgba(245,215,118,0.3); border-radius: 2px; }
-
-    /* Hide Streamlit chrome */
     #MainMenu, header, footer { visibility: hidden; }
     [data-testid="stDecoration"] { display: none; }
     </style>
@@ -362,7 +309,7 @@ def get_grok_client():
             base_url="https://api.x.ai/v1",
         )
     except Exception as e:
-        st.error(f"❌ Brak klucza Grok API w Secrets: {e}")
+        st.error(f"❌ Brak klucza Grok API: {e}")
         return None
 
 
@@ -371,55 +318,201 @@ def ask_grok(messages: list, system: str = None) -> str:
     if not client:
         return "Przepraszam, wystąpił problem techniczny. Proszę zadzwonić: +48 500 123 456."
     try:
-        sys_msg = system or KNOWLEDGE_BASE
         resp = client.chat.completions.create(
             model="grok-3-latest",
-            messages=[{"role": "system", "content": sys_msg}] + messages,
+            messages=[{"role": "system", "content": system or KNOWLEDGE_BASE}] + messages,
             max_tokens=600,
             temperature=0.72,
         )
         return resp.choices[0].message.content
     except Exception as e:
-        return f"Przepraszam, błąd połączenia: {e}"
+        return f"Przepraszam, błąd: {e}"
 
 
 def extract_client_info(messages: list) -> dict:
-    """Grok wyciąga strukturyzowane dane z rozmowy do zapisania w arkuszu."""
+    """Grok wyciąga imię, email i telefon klientki z historii rozmowy."""
     client = get_grok_client()
     if not client:
         return {}
     try:
-        history = "\n".join([f"{m['role'].upper()}: {m['content'][:150]}" for m in messages[-10:]])
+        history = "\n".join([f"{m['role'].upper()}: {m['content'][:150]}" for m in messages[-12:]])
         resp = client.chat.completions.create(
             model="grok-3-latest",
             messages=[{"role": "user", "content": (
                 f"Z tej rozmowy wyciągnij dane klientki.\n"
-                f"Odpowiedz TYLKO w tym formacie (bez nic więcej):\n"
-                f"IMIĘ: xxx\n"
+                f"Odpowiedz TYLKO w tym formacie, bez żadnego dodatkowego tekstu:\n"
+                f"IMIE: xxx\n"
+                f"EMAIL: xxx lub brak\n"
                 f"TELEFON: xxx lub brak\n"
-                f"UWAGI: krótkie podsumowanie max 2 zdania\n\n"
+                f"PODSUMOWANIE: 2-3 zdania co klientka chce i jakie odpowiedzi udzieliła\n\n"
                 f"Rozmowa:\n{history}"
             )}],
-            max_tokens=100,
+            max_tokens=150,
             temperature=0,
         )
         text = resp.choices[0].message.content
         result = {}
         for line in text.strip().split("\n"):
-            if "IMIĘ:" in line:
-                result["imie"] = line.split("IMIĘ:")[1].strip()
+            if "IMIE:" in line:
+                result["imie"] = line.split("IMIE:")[1].strip()
+            elif "EMAIL:" in line:
+                val = line.split("EMAIL:")[1].strip()
+                result["email"] = val if "@" in val else ""
             elif "TELEFON:" in line:
                 result["telefon"] = line.split("TELEFON:")[1].strip()
-            elif "UWAGI:" in line:
-                result["uwagi"] = line.split("UWAGI:")[1].strip()
+            elif "PODSUMOWANIE:" in line:
+                result["podsumowanie"] = line.split("PODSUMOWANIE:")[1].strip()
         return result
     except Exception:
         return {}
 
 # ─────────────────────────────────────────────
+# EMAIL – GMAIL SMTP
+# ─────────────────────────────────────────────
+def send_emails(procedure: str, client_info: dict, messages: list) -> dict:
+    """
+    Wysyła dwa emaile:
+    1. Do klientki – piękne podsumowanie konsultacji w HTML
+    2. Do właścicielki – powiadomienie z danymi klientki
+    Zwraca {"client": bool, "owner": bool}
+    """
+    try:
+        gmail_user = st.secrets["email"]["gmail_user"]
+        gmail_pass = st.secrets["email"]["gmail_password"]
+        owner_email = st.secrets["app"]["owner_email"]
+    except Exception:
+        return {"client": False, "owner": False, "error": "Brak konfiguracji email w Secrets"}
+
+    imie = client_info.get("imie", "Klientko")
+    client_email = client_info.get("email", "")
+    podsumowanie = client_info.get("podsumowanie", "Konsultacja zakończona.")
+    proc_data = PROCEDURES.get(procedure, {})
+    teraz = datetime.now().strftime("%d.%m.%Y o %H:%M")
+
+    results = {"client": False, "owner": False}
+
+    # ── HTML template emaila ──────────────────
+    def make_html(title: str, body_html: str) -> str:
+        return f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+        <meta charset="UTF-8">
+        <style>
+            body {{ font-family: 'Georgia', serif; background:#f8f4ed; margin:0; padding:0; }}
+            .wrap {{ max-width:560px; margin:40px auto; background:#fff; border-radius:16px;
+                     overflow:hidden; box-shadow:0 4px 24px rgba(0,0,0,0.08); }}
+            .header {{ background:#0f1f3d; padding:32px 40px; text-align:center; }}
+            .header h1 {{ color:#f5d776; font-size:1.6rem; margin:0; letter-spacing:0.08em; }}
+            .header p  {{ color:rgba(248,244,237,0.6); font-size:0.75rem;
+                          letter-spacing:0.25em; text-transform:uppercase; margin:6px 0 0; }}
+            .body {{ padding:32px 40px; color:#1a1a2e; line-height:1.7; }}
+            .body h2 {{ color:#0f1f3d; font-size:1.1rem; margin-bottom:0.5rem; }}
+            .pill {{ display:inline-block; background:#f5d776; color:#0f1f3d;
+                     border-radius:20px; padding:4px 14px; font-size:0.8rem;
+                     font-weight:600; margin-bottom:1rem; }}
+            .info-box {{ background:#f8f4ed; border-left:3px solid #f5d776;
+                         border-radius:8px; padding:14px 18px; margin:16px 0;
+                         font-size:0.9rem; color:#333; }}
+            .footer {{ background:#0f1f3d; padding:20px 40px; text-align:center;
+                       color:rgba(248,244,237,0.45); font-size:0.75rem; }}
+        </style>
+        </head>
+        <body>
+        <div class="wrap">
+            <div class="header">
+                <h1>✦ BeautyFlow</h1>
+                <p>Premium Beauty Studio · Warszawa</p>
+            </div>
+            <div class="body">
+                {body_html}
+            </div>
+            <div class="footer">
+                ul. Złota 12, Warszawa · +48 500 123 456 · hello@beautyflow.pl<br>
+                Pon–Pt 9:00–20:00 · Sobota 9:00–16:00
+            </div>
+        </div>
+        </body>
+        </html>
+        """
+
+    # ── Email do KLIENTKI ─────────────────────
+    if client_email:
+        body_client = f"""
+        <h2>Dziękujemy za konsultację, {imie}! 🌸</h2>
+        <p>Oto podsumowanie Twojej rozmowy z Sofią z dnia <strong>{teraz}</strong>.</p>
+
+        <div class="pill">{proc_data.get('emoji','✨')} {procedure}</div>
+
+        <div class="info-box">
+            <strong>Podsumowanie konsultacji:</strong><br>{podsumowanie}
+        </div>
+
+        <div class="info-box">
+            ⏱ Czas zabiegu: <strong>{proc_data.get('time','–')}</strong><br>
+            💰 Cena: <strong>{proc_data.get('price','–')}</strong><br>
+            📋 Przygotowanie: <strong>{proc_data.get('prep','–')}</strong>
+        </div>
+
+        <p>Nasza specjalistka skontaktuje się z Tobą wkrótce w celu ustalenia terminu wizyty.</p>
+        <p>Do zobaczenia w salonie! 💛</p>
+        <p style="color:#999;font-size:0.85rem;">— Zespół BeautyFlow</p>
+        """
+        try:
+            msg = MIMEMultipart("alternative")
+            msg["Subject"] = f"✦ BeautyFlow – podsumowanie konsultacji: {procedure}"
+            msg["From"] = f"BeautyFlow AI <{gmail_user}>"
+            msg["To"] = client_email
+            msg.attach(MIMEText(make_html("Podsumowanie konsultacji", body_client), "html", "utf-8"))
+
+            with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+                server.login(gmail_user, gmail_pass)
+                server.sendmail(gmail_user, client_email, msg.as_string())
+            results["client"] = True
+        except Exception as e:
+            results["client_error"] = str(e)
+
+    # ── Email do WŁAŚCICIELKI ─────────────────
+    telefon = client_info.get("telefon", "–")
+    body_owner = f"""
+    <h2>🔔 Nowa konsultacja AI</h2>
+    <p>Data: <strong>{teraz}</strong></p>
+
+    <div class="pill">{proc_data.get('emoji','✨')} {procedure}</div>
+
+    <div class="info-box">
+        👤 Imię: <strong>{imie}</strong><br>
+        📧 Email: <strong>{client_email or '–'}</strong><br>
+        📞 Telefon: <strong>{telefon}</strong>
+    </div>
+
+    <div class="info-box">
+        <strong>Podsumowanie rozmowy przez AI:</strong><br>
+        {podsumowanie}
+    </div>
+
+    <p style="color:#999;font-size:0.85rem;">
+        Wiadomość wygenerowana automatycznie przez system BeautyFlow AI.
+    </p>
+    """
+    try:
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = f"🌸 BeautyFlow – nowa konsultacja: {imie} ({procedure})"
+        msg["From"] = f"BeautyFlow AI <{gmail_user}>"
+        msg["To"] = owner_email
+        msg.attach(MIMEText(make_html("Nowa konsultacja", body_owner), "html", "utf-8"))
+
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+            server.login(gmail_user, gmail_pass)
+            server.sendmail(gmail_user, owner_email, msg.as_string())
+        results["owner"] = True
+    except Exception as e:
+        results["owner_error"] = str(e)
+
+    return results
+
+# ─────────────────────────────────────────────
 # GOOGLE SHEETS
-# Arkusz: nazwij go "BeautyFlow Konsultacje"
-# Powiadomienia: Narzędzia → Powiadomienia → "Od razu" → Twój email
 # ─────────────────────────────────────────────
 @st.cache_resource(ttl=300)
 def get_sheets_client():
@@ -432,58 +525,37 @@ def get_sheets_client():
             ],
         )
         return gspread.authorize(creds)
-    except Exception as e:
+    except Exception:
         return None
 
 
-def save_consultation(procedure: str, messages: list, client_info: dict) -> bool:
-    """
-    Zapisuje konsultację do arkusza Google Sheets.
-    POWIADOMIENIE EMAIL: skonfiguruj w arkuszu → Narzędzia → Powiadomienia
-    """
+def save_to_sheet(procedure: str, client_info: dict, messages: list) -> bool:
     try:
         gc = get_sheets_client()
         if not gc:
             return False
-
-        sheet_id = st.secrets["sheets"]["sheet_id"]
-        spreadsheet = gc.open_by_key(sheet_id)
-
-        # Znajdź lub stwórz arkusz "Konsultacje"
+        spreadsheet = gc.open_by_key(st.secrets["sheets"]["sheet_id"])
         try:
             ws = spreadsheet.worksheet("Konsultacje")
         except gspread.WorksheetNotFound:
             ws = spreadsheet.add_worksheet("Konsultacje", rows=2000, cols=8)
-            ws.append_row([
-                "📅 Data i godzina",
-                "👤 Imię klientki",
-                "📞 Telefon",
-                "💆 Wybrany zabieg",
-                "💬 Liczba wiadomości",
-                "📝 Uwagi AI",
-                "📄 Fragment rozmowy",
-            ])
-            # Nagłówki pogrubione
-            ws.format("A1:G1", {"textFormat": {"bold": True}})
-
-        # Zbierz fragment rozmowy
-        fragment = " ↳ ".join([
-            f"[{m['role']}] {m['content'][:100]}"
-            for m in messages[-6:]
-        ])
+            ws.append_row(["Data", "Imię", "Email", "Telefon", "Zabieg",
+                           "Wiadomości", "Podsumowanie AI", "Email wysłany"])
+            ws.format("A1:H1", {"textFormat": {"bold": True}})
 
         ws.append_row([
             datetime.now().strftime("%Y-%m-%d %H:%M"),
-            client_info.get("imie", "nieznane"),
+            client_info.get("imie", "–"),
+            client_info.get("email", "–"),
             client_info.get("telefon", "–"),
             procedure,
             len(messages),
-            client_info.get("uwagi", "–"),
-            fragment[:1000],
+            client_info.get("podsumowanie", "–"),
+            "tak" if client_info.get("email") else "brak emaila",
         ])
         return True
     except Exception as e:
-        st.error(f"Błąd zapisu Sheets: {e}")
+        st.error(f"Błąd Sheets: {e}")
         return False
 
 # ─────────────────────────────────────────────
@@ -510,13 +582,14 @@ def render_sidebar():
         st.markdown("---")
         render_owner_panel()
 
-        # Status API
         st.markdown("---")
-        grok_ok = "app" in st.secrets and "grok_api_key" in st.secrets["app"]
-        sheets_ok = "gcp_service_account" in st.secrets and "sheets" in st.secrets
+        grok_ok = "app" in st.secrets and "grok_api_key" in st.secrets.get("app", {})
+        sheets_ok = "gcp_service_account" in st.secrets
+        email_ok = "email" in st.secrets
         st.markdown(
             f"{'🟢' if grok_ok else '🔴'} Grok API  \n"
-            f"{'🟢' if sheets_ok else '🔴'} Google Sheets"
+            f"{'🟢' if sheets_ok else '🔴'} Google Sheets  \n"
+            f"{'🟢' if email_ok else '🔴'} Email (Gmail)"
         )
 
 
@@ -526,8 +599,8 @@ def render_owner_panel():
         st.session_state.owner_auth = False
 
     if not st.session_state.owner_auth:
-        pw = st.text_input("Hasło:", type="password", key="opw", label_visibility="collapsed",
-                           placeholder="Wpisz hasło...")
+        pw = st.text_input("Hasło:", type="password", key="opw",
+                           label_visibility="collapsed", placeholder="Wpisz hasło...")
         if st.button("Zaloguj się", key="ologin"):
             try:
                 correct = st.secrets["app"]["owner_password"]
@@ -542,7 +615,6 @@ def render_owner_panel():
         st.success("✓ Zalogowano")
         if "busy_slots" not in st.session_state:
             st.session_state.busy_slots = []
-
         slot = st.text_input("Zablokuj termin:", key="nslot",
                              placeholder="np. 20.06 godz. 14:00",
                              label_visibility="collapsed")
@@ -555,18 +627,16 @@ def render_owner_panel():
             if st.button("🗑 Wyczyść", key="clrslot"):
                 st.session_state.busy_slots = []
                 st.rerun()
-
         if st.session_state.busy_slots:
             st.markdown("**Zajęte terminy:**")
             for s in st.session_state.busy_slots:
                 st.markdown(f"🔴 {s}")
-
         if st.button("Wyloguj", key="ologout"):
             st.session_state.owner_auth = False
             st.rerun()
 
 # ─────────────────────────────────────────────
-# EKRAN WYBORU ZABIEGU
+# WYBÓR ZABIEGU
 # ─────────────────────────────────────────────
 def render_procedure_picker():
     st.markdown("""
@@ -575,16 +645,14 @@ def render_procedure_picker():
             Na co chcesz się umówić?
         </div>
         <div style="font-size:0.85rem;color:rgba(248,244,237,0.5);">
-            Wybierz zabieg – Sofia przeprowadzi Cię przez krótką konsultację kwalifikującą.
+            Wybierz zabieg – Sofia przeprowadzi Cię przez krótką konsultację i wyśle podsumowanie na email.
         </div>
     </div>
     """, unsafe_allow_html=True)
 
     cols = st.columns(2)
-    items = list(PROCEDURES.items())
-    for i, (name, p) in enumerate(items):
+    for i, (name, p) in enumerate(PROCEDURES.items()):
         with cols[i % 2]:
-            # Karta HTML – klikalna przez button poniżej
             st.markdown(f"""
             <div class="proc-card">
                 <div>
@@ -595,17 +663,15 @@ def render_procedure_picker():
                 <div class="card-meta">⏱ {p['time']} &nbsp;·&nbsp; 💰 {p['price']}</div>
             </div>
             """, unsafe_allow_html=True)
-            if st.button(f"Wybieram →", key=f"pick_{name}", use_container_width=True):
+            if st.button("Wybieram →", key=f"pick_{name}", use_container_width=True):
                 st.session_state.chosen_procedure = name
                 st.session_state.chat_stage = "chat"
-                # Pierwsza wiadomość Sofii od razu nawiązuje do wybranego zabiegu
                 intro = ask_grok(
                     messages=[{"role": "user", "content": f"Chcę się dowiedzieć o {name}"}],
-                    system=KNOWLEDGE_BASE + f"\nKlientka wybrała: {name}. Przywitaj się, powiedz krótko o zabiegu i zacznij pytania kwalifikujące – 1-2 pierwsze pytania."
+                    system=KNOWLEDGE_BASE + f"\nKlientka wybrała: {name}. Przywitaj się ciepło, powiedz 1-2 zdania o zabiegu i zacznij pierwsze pytanie kwalifikujące."
                 )
-                st.session_state.messages = [
-                    {"role": "assistant", "content": intro}
-                ]
+                st.session_state.messages = [{"role": "assistant", "content": intro}]
+                st.session_state.saved = False
                 st.rerun()
 
 # ─────────────────────────────────────────────
@@ -615,9 +681,9 @@ def render_chat():
     procedure = st.session_state.get("chosen_procedure", "")
     messages = st.session_state.get("messages", [])
     saved = st.session_state.get("saved", False)
-
-    # Nagłówek czatu
     p = PROCEDURES.get(procedure, {})
+
+    # Nagłówek
     st.markdown(f"""
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:1rem;">
         <span style="font-size:1.5rem;">{p.get('emoji','✨')}</span>
@@ -625,37 +691,59 @@ def render_chat():
             <div style="font-family:'DM Serif Display',serif;font-size:1.1rem;color:#f5d776;">{procedure}</div>
             <div style="font-size:0.75rem;color:rgba(248,244,237,0.45);">{p.get('tagline','')}</div>
         </div>
-        <div style="margin-left:auto;font-size:0.72rem;color:rgba(248,244,237,0.35);">
-            Konsultantka: Sofia AI
-        </div>
+        <div style="margin-left:auto;font-size:0.72rem;color:rgba(248,244,237,0.35);">Sofia AI</div>
     </div>
     <div style="height:1px;background:rgba(245,215,118,0.1);margin-bottom:1rem;"></div>
     """, unsafe_allow_html=True)
 
-    # Historia wiadomości
+    # Historia czatu
     for msg in messages:
-        avatar = "✦" if msg["role"] == "assistant" else "👤"
+        avatar = "🌸" if msg["role"] == "assistant" else "👤"
         with st.chat_message(msg["role"], avatar=avatar):
             st.markdown(msg["content"])
 
-    # Przycisk zapis + powrót (po 5+ wiadomościach)
+    # Przycisk zapisu + wysyłki emaili (po 5+ wiadomościach)
     if len(messages) >= 5 and not saved:
+        st.markdown("")
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
-            if st.button("💾 Zapisz konsultację do arkusza", use_container_width=True, key="save_btn"):
-                with st.spinner("Sofia analizuje rozmowę..."):
+            if st.button("📩 Zapisz i wyślij podsumowanie emailem", use_container_width=True, key="save_btn"):
+                with st.spinner("Sofia przygotowuje podsumowanie..."):
                     info = extract_client_info(messages)
-                    ok = save_consultation(procedure, messages, info)
-                if ok:
-                    st.success(f"✅ Zapisano! Klientka: **{info.get('imie','?')}** · Zabieg: **{procedure}**")
-                    st.caption("📧 Powiadomienie email wysłane automatycznie przez Google Sheets")
-                    st.session_state.saved = True
-                    st.rerun()
+
+                # Zapisz do arkusza
+                sheet_ok = save_to_sheet(procedure, info, messages)
+
+                # Wyślij emaile
+                email_results = send_emails(procedure, info, messages)
+
+                # Pokaż wyniki
+                client_email = info.get("email", "")
+                if sheet_ok:
+                    st.success("✅ Zapisano w Google Sheets")
                 else:
-                    st.warning("⚠️ Błąd zapisu – sprawdź konfigurację Google Sheets w Secrets")
+                    st.warning("⚠️ Błąd zapisu do arkusza – sprawdź konfigurację Sheets")
+
+                if email_results.get("owner"):
+                    st.success(f"📧 Powiadomienie wysłane do właścicielki")
+                else:
+                    err = email_results.get("owner_error", "sprawdź konfigurację Gmail w Secrets")
+                    st.warning(f"⚠️ Nie udało się wysłać do właścicielki: {err}")
+
+                if client_email:
+                    if email_results.get("client"):
+                        st.success(f"📧 Podsumowanie wysłane do klientki na {client_email}")
+                    else:
+                        err = email_results.get("client_error", "nieznany błąd")
+                        st.warning(f"⚠️ Nie udało się wysłać do klientki: {err}")
+                else:
+                    st.info("ℹ️ Klientka nie podała emaila – podsumowanie nie zostało wysłane")
+
+                st.session_state.saved = True
+                st.rerun()
 
     if saved:
-        st.success("✅ Konsultacja zapisana w arkuszu Google Sheets")
+        st.success("✅ Konsultacja zakończona i zapisana")
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
             if st.button("← Nowa konsultacja", use_container_width=True, key="new_btn"):
@@ -667,20 +755,17 @@ def render_chat():
 
     # Input klientki
     if not saved:
-        if prompt := st.chat_input(f"Napisz do Sofii o {procedure.lower()}..."):
+        if prompt := st.chat_input(f"Napisz do Sofii..."):
             messages.append({"role": "user", "content": prompt})
             with st.chat_message("user", avatar="👤"):
                 st.markdown(prompt)
-
-            with st.chat_message("assistant", avatar="✦"):
-                with st.spinner(""):
-                    st.markdown('<span class="dot"></span><span class="dot"></span><span class="dot"></span>', unsafe_allow_html=True)
+            with st.chat_message("assistant", avatar="🌸"):
+                with st.spinner("Sofia pisze..."):
                     reply = ask_grok(
                         messages=messages,
                         system=KNOWLEDGE_BASE + f"\nAktualnie omawiany zabieg: {procedure}"
                     )
                 st.markdown(reply)
-
             messages.append({"role": "assistant", "content": reply})
             st.session_state.messages = messages
             st.rerun()
@@ -692,7 +777,6 @@ def main():
     inject_css()
     render_sidebar()
 
-    # Stan globalny
     if "chat_stage" not in st.session_state:
         st.session_state.chat_stage = "pick"
     if "chosen_procedure" not in st.session_state:
@@ -705,11 +789,9 @@ def main():
     _, col, _ = st.columns([0.5, 5, 0.5])
     with col:
         render_logo()
-
         if st.session_state.chat_stage == "pick":
             render_procedure_picker()
         else:
-            # Przycisk powrotu
             if st.button("← Zmień zabieg", key="back_btn"):
                 st.session_state.chat_stage = "pick"
                 st.session_state.messages = []
