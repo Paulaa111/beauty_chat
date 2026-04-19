@@ -203,6 +203,20 @@ def inject_css():
         margin-bottom: 0.5rem !important;
         animation: fadeUp 0.3s ease forwards;
     }
+    [data-testid="stChatMessage"] p,
+    [data-testid="stChatMessage"] span,
+    [data-testid="stChatMessage"] div,
+    [data-testid="stChatMessage"] li,
+    [data-testid="stChatMessage"] strong,
+    [data-testid="stChatMessage"] em {
+        color: #f8f4ed !important;
+        font-size: 0.97rem !important;
+        line-height: 1.7 !important;
+    }
+    [data-testid="stChatMessage"] strong {
+        color: #f5d776 !important;
+        font-weight: 600 !important;
+    }
     @keyframes fadeUp {
         from { opacity:0; transform: translateY(8px); }
         to   { opacity:1; transform: translateY(0); }
@@ -511,6 +525,114 @@ def send_emails(procedure: str, client_info: dict, messages: list) -> dict:
 
     return results
 
+
+def send_booking_status_email(booking: dict, confirmed: bool) -> bool:
+    """
+    Wysyła klientce email z potwierdzeniem lub odrzuceniem rezerwacji.
+    Wywoływana przez właścicielkę z panelu po kliknięciu Potwierdź / Odrzuć.
+    """
+    client_email = booking.get("email", "")
+    if not client_email or "@" not in client_email:
+        return False  # brak emaila klientki – nic nie wysyłamy
+
+    try:
+        gmail_user = st.secrets["email"]["gmail_user"]
+        gmail_pass = st.secrets["email"]["gmail_password"]
+    except Exception:
+        return False
+
+    imie      = booking.get("imie", "Klientko")
+    termin    = booking.get("termin", "–")
+    zabieg    = booking.get("zabieg", "–")
+    proc_data = PROCEDURES.get(zabieg, {})
+
+    if confirmed:
+        subject = f"✅ BeautyFlow – Twoja rezerwacja potwierdzona!"
+        body = f"""
+        <h2>Twoja rezerwacja jest potwierdzona, {imie}! 🎉</h2>
+        <p>Cieszymy się, że wkrótce Cię zobaczymy w BeautyFlow.</p>
+
+        <div class="pill">{proc_data.get('emoji','✨')} {zabieg}</div>
+
+        <div class="info-box" style="border-left-color:#4caf50;">
+            📅 <strong>Termin:</strong> {termin}<br>
+            ⏱ <strong>Czas zabiegu:</strong> {proc_data.get('time','–')}<br>
+            📍 <strong>Adres:</strong> ul. Złota 12, Warszawa
+        </div>
+
+        <div class="info-box">
+            📋 <strong>Przygotowanie do zabiegu:</strong><br>
+            {proc_data.get('prep','–')}
+        </div>
+
+        <p>W razie pytań zadzwoń: <strong>+48 500 123 456</strong> lub napisz na <strong>hello@beautyflow.pl</strong></p>
+        <p>Do zobaczenia! 💛</p>
+        <p style="color:#999;font-size:0.85rem;">— Zespół BeautyFlow</p>
+        """
+    else:
+        subject = f"BeautyFlow – informacja o Twojej rezerwacji"
+        body = f"""
+        <h2>Informacja o rezerwacji, {imie}</h2>
+        <p>Niestety musisz wiedzieć, że wybrany przez Ciebie termin nie jest już dostępny.</p>
+
+        <div class="pill">{proc_data.get('emoji','✨')} {zabieg}</div>
+
+        <div class="info-box" style="border-left-color:#e57373;">
+            📅 <strong>Termin:</strong> {termin}<br>
+            ℹ️ <strong>Status:</strong> niedostępny
+        </div>
+
+        <p>Zapraszamy do ponownego umówienia się – skontaktuj się z nami:</p>
+        <p>📞 <strong>+48 500 123 456</strong><br>✉️ <strong>hello@beautyflow.pl</strong></p>
+        <p>Przepraszamy za niedogodności i mamy nadzieję zobaczyć Cię wkrótce! 🌸</p>
+        <p style="color:#999;font-size:0.85rem;">— Zespół BeautyFlow</p>
+        """
+
+    try:
+        # Używamy tego samego make_html co w send_emails – budujemy go inline
+        html = f"""<!DOCTYPE html><html><head><meta charset="UTF-8">
+        <style>
+            body {{ font-family: 'Georgia', serif; background:#f8f4ed; margin:0; padding:0; }}
+            .wrap {{ max-width:560px; margin:40px auto; background:#fff; border-radius:16px;
+                     overflow:hidden; box-shadow:0 4px 24px rgba(0,0,0,0.08); }}
+            .header {{ background:#0f1f3d; padding:32px 40px; text-align:center; }}
+            .header h1 {{ color:#f5d776; font-size:1.6rem; margin:0; letter-spacing:0.08em; }}
+            .header p  {{ color:rgba(248,244,237,0.6); font-size:0.75rem;
+                          letter-spacing:0.25em; text-transform:uppercase; margin:6px 0 0; }}
+            .body {{ padding:32px 40px; color:#1a1a2e; line-height:1.7; }}
+            .pill {{ display:inline-block; background:#f5d776; color:#0f1f3d;
+                     border-radius:20px; padding:4px 14px; font-size:0.8rem;
+                     font-weight:600; margin-bottom:1rem; }}
+            .info-box {{ background:#f8f4ed; border-left:3px solid #f5d776;
+                         border-radius:8px; padding:14px 18px; margin:16px 0;
+                         font-size:0.9rem; color:#333; }}
+            .footer {{ background:#0f1f3d; padding:20px 40px; text-align:center;
+                       color:rgba(248,244,237,0.45); font-size:0.75rem; }}
+        </style></head><body>
+        <div class="wrap">
+            <div class="header"><h1>✦ BeautyFlow</h1>
+            <p>Premium Beauty Studio · Warszawa</p></div>
+            <div class="body">{body}</div>
+            <div class="footer">
+                ul. Złota 12, Warszawa · +48 500 123 456 · hello@beautyflow.pl<br>
+                Pon–Pt 9:00–20:00 · Sobota 9:00–16:00
+            </div>
+        </div></body></html>"""
+
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = subject
+        msg["From"]    = f"BeautyFlow AI <{gmail_user}>"
+        msg["To"]      = client_email
+        msg.attach(MIMEText(html, "html", "utf-8"))
+
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+            server.login(gmail_user, gmail_pass)
+            server.sendmail(gmail_user, client_email, msg.as_string())
+        return True
+    except Exception as e:
+        st.warning(f"Błąd wysyłki emaila do klientki: {e}")
+        return False
+
 # ─────────────────────────────────────────────
 # GOOGLE SHEETS
 # ─────────────────────────────────────────────
@@ -529,34 +651,151 @@ def get_sheets_client():
         return None
 
 
-def save_to_sheet(procedure: str, client_info: dict, messages: list) -> bool:
+def get_or_create_ws(spreadsheet, name: str, headers: list):
+    """Pobiera arkusz lub tworzy go z nagłówkami."""
     try:
-        gc = get_sheets_client()
-        if not gc:
-            return False
-        spreadsheet = gc.open_by_key(st.secrets["sheets"]["sheet_id"])
-        try:
-            ws = spreadsheet.worksheet("Konsultacje")
-        except gspread.WorksheetNotFound:
-            ws = spreadsheet.add_worksheet("Konsultacje", rows=2000, cols=8)
-            ws.append_row(["Data", "Imię", "Email", "Telefon", "Zabieg",
-                           "Wiadomości", "Podsumowanie AI", "Email wysłany"])
-            ws.format("A1:H1", {"textFormat": {"bold": True}})
+        ws = spreadsheet.worksheet(name)
+    except gspread.WorksheetNotFound:
+        ws = spreadsheet.add_worksheet(name, rows=2000, cols=len(headers))
+        ws.append_row(headers)
+        ws.format(f"A1:{chr(64+len(headers))}1", {"textFormat": {"bold": True}})
+    return ws
 
+
+def get_spreadsheet():
+    gc = get_sheets_client()
+    if not gc:
+        return None
+    try:
+        return gc.open_by_key(st.secrets["sheets"]["sheet_id"])
+    except Exception:
+        return None
+
+
+def save_to_sheet(procedure: str, client_info: dict, messages: list) -> bool:
+    """Zapisuje konsultację do arkusza Konsultacje."""
+    try:
+        sp = get_spreadsheet()
+        if not sp:
+            return False
+        ws = get_or_create_ws(sp, "Konsultacje", [
+            "Data", "Imię", "Email", "Telefon", "Zabieg",
+            "Termin", "Wiadomości", "Podsumowanie AI", "Status"
+        ])
         ws.append_row([
             datetime.now().strftime("%Y-%m-%d %H:%M"),
             client_info.get("imie", "–"),
             client_info.get("email", "–"),
             client_info.get("telefon", "–"),
             procedure,
+            client_info.get("termin", "–"),
             len(messages),
             client_info.get("podsumowanie", "–"),
-            "tak" if client_info.get("email") else "brak emaila",
+            "oczekuje na potwierdzenie" if client_info.get("termin") else "bez terminu",
         ])
         return True
     except Exception as e:
-        st.error(f"Błąd Sheets: {e}")
+        st.error(f"Błąd Sheets (konsultacje): {e}")
         return False
+
+
+# ── TERMINY ──────────────────────────────────
+
+def load_slots_from_sheet():
+    """Wczytuje wolne terminy z arkusza Terminy."""
+    try:
+        sp = get_spreadsheet()
+        if not sp:
+            return [], []
+        ws_t = get_or_create_ws(sp, "Terminy", ["Termin", "Status"])
+        ws_r = get_or_create_ws(sp, "Rezerwacje", [
+            "Data zgłoszenia", "Termin", "Imię", "Email", "Telefon", "Zabieg", "Status"
+        ])
+
+        # Wczytaj terminy
+        slots = []
+        rows_t = ws_t.get_all_records()
+        for r in rows_t:
+            if r.get("Termin"):
+                slots.append({
+                    "termin": r["Termin"],
+                    "zajety": r.get("Status", "wolny") == "zajęty"
+                })
+
+        # Wczytaj rezerwacje oczekujące
+        pending = []
+        rows_r = ws_r.get_all_records()
+        for r in rows_r:
+            if r.get("Status") == "oczekuje":
+                pending.append({
+                    "imie":    r.get("Imię", "?"),
+                    "email":   r.get("Email", "-"),
+                    "telefon": r.get("Telefon", "-"),
+                    "zabieg":  r.get("Zabieg", "-"),
+                    "termin":  r.get("Termin", "-"),
+                })
+        return slots, pending
+    except Exception as e:
+        return [], []
+
+
+def save_slot_to_sheet(termin: str, status: str = "wolny"):
+    """Dodaje lub aktualizuje termin w arkuszu Terminy."""
+    try:
+        sp = get_spreadsheet()
+        if not sp:
+            return False
+        ws = get_or_create_ws(sp, "Terminy", ["Termin", "Status"])
+        # Sprawdź czy termin już istnieje
+        rows = ws.get_all_records()
+        for i, r in enumerate(rows, start=2):
+            if r.get("Termin") == termin:
+                ws.update(f"B{i}", [[status]])
+                return True
+        # Nowy termin
+        ws.append_row([termin, status])
+        return True
+    except Exception as e:
+        return False
+
+
+def save_pending_to_sheet(booking: dict):
+    """Zapisuje rezerwację oczekującą do arkusza Rezerwacje."""
+    try:
+        sp = get_spreadsheet()
+        if not sp:
+            return False
+        ws = get_or_create_ws(sp, "Rezerwacje", [
+            "Data zgłoszenia", "Termin", "Imię", "Email", "Telefon", "Zabieg", "Status"
+        ])
+        ws.append_row([
+            datetime.now().strftime("%Y-%m-%d %H:%M"),
+            booking.get("termin", "-"),
+            booking.get("imie", "-"),
+            booking.get("email", "-"),
+            booking.get("telefon", "-"),
+            booking.get("zabieg", "-"),
+            "oczekuje",
+        ])
+        return True
+    except Exception as e:
+        return False
+
+
+def update_booking_status(termin: str, imie: str, new_status: str):
+    """Zmienia status rezerwacji w arkuszu Rezerwacje."""
+    try:
+        sp = get_spreadsheet()
+        if not sp:
+            return
+        ws = sp.worksheet("Rezerwacje")
+        rows = ws.get_all_records()
+        for i, r in enumerate(rows, start=2):
+            if r.get("Termin") == termin and r.get("Imię") == imie and r.get("Status") == "oczekuje":
+                ws.update(f"G{i}", [[new_status]])
+                return
+    except Exception:
+        pass
 
 # ─────────────────────────────────────────────
 # SIDEBAR
@@ -608,29 +847,103 @@ def render_owner_panel():
                 correct = "admin"
             if pw == correct:
                 st.session_state.owner_auth = True
+                # Wczytaj terminy i rezerwacje z Sheets przy logowaniu
+                slots, pending = load_slots_from_sheet()
+                st.session_state.available_slots = slots
+                st.session_state.pending_bookings = pending
                 st.rerun()
             else:
                 st.error("Nieprawidłowe hasło")
     else:
         st.success("✓ Zalogowano")
-        if "busy_slots" not in st.session_state:
-            st.session_state.busy_slots = []
-        slot = st.text_input("Zablokuj termin:", key="nslot",
-                             placeholder="np. 20.06 godz. 14:00",
+
+        # ── DOSTĘPNE TERMINY ──────────────────────
+        st.markdown("**📅 Wolne terminy do rezerwacji:**")
+        slot = st.text_input("", key="nslot",
+                             placeholder="np. 20.06.2025 godz. 14:00",
                              label_visibility="collapsed")
         c1, c2 = st.columns(2)
         with c1:
             if st.button("➕ Dodaj", key="addslot") and slot.strip():
-                st.session_state.busy_slots.append(slot.strip())
+                new_slot = {"termin": slot.strip(), "zajety": False}
+                st.session_state.available_slots.append(new_slot)
+                save_slot_to_sheet(slot.strip(), "wolny")  # zapis do Sheets
                 st.rerun()
         with c2:
-            if st.button("🗑 Wyczyść", key="clrslot"):
-                st.session_state.busy_slots = []
+            if st.button("🗑 Wyczyść wolne", key="clrslot"):
+                # Usuń tylko wolne (zachowaj zajęte)
+                st.session_state.available_slots = [
+                    s for s in st.session_state.available_slots if s["zajety"]
+                ]
+                # Zapisz stan do Sheets
+                sp = get_spreadsheet()
+                if sp:
+                    try:
+                        ws = sp.worksheet("Terminy")
+                        rows = ws.get_all_records()
+                        for i, r in enumerate(rows, start=2):
+                            if r.get("Status") == "wolny":
+                                ws.delete_rows(i)
+                    except Exception:
+                        pass
                 st.rerun()
-        if st.session_state.busy_slots:
-            st.markdown("**Zajęte terminy:**")
-            for s in st.session_state.busy_slots:
-                st.markdown(f"🔴 {s}")
+
+        for s in st.session_state.get("available_slots", []):
+            ikona = "🔴" if s["zajety"] else "🟢"
+            status = " *(zarezerwowany)*" if s["zajety"] else ""
+            st.markdown(f"{ikona} {s['termin']}{status}")
+
+        # ── REZERWACJE DO POTWIERDZENIA ───────────
+        pending = st.session_state.get("pending_bookings", [])
+        if pending:
+            st.markdown("---")
+            st.markdown(f"**🔔 Do potwierdzenia ({len(pending)}):**")
+            for i, b in enumerate(pending):
+                st.markdown(
+                    f"👤 **{b.get('imie','?')}** · {b.get('zabieg','?')}  \n"
+                    f"📅 {b.get('termin','?')}  \n"
+                    f"📧 {b.get('email','-')} · 📞 {b.get('telefon','-')}"
+                )
+                col1, col2 = st.columns(2)
+                with col1:
+                    if st.button("✅ Potwierdź", key=f"confirm_{i}"):
+                        save_slot_to_sheet(b.get("termin",""), "zajęty")
+                        update_booking_status(b.get("termin",""), b.get("imie",""), "potwierdzona")
+                        for s in st.session_state.available_slots:
+                            if s["termin"] == b.get("termin"):
+                                s["zajety"] = True
+                        st.session_state.pending_bookings.pop(i)
+                        # Wyślij email do klientki
+                        sent = send_booking_status_email(b, confirmed=True)
+                        if sent:
+                            st.success(f"✅ Potwierdzono! Email wysłany do {b.get('email','-')}")
+                        else:
+                            st.success("✅ Potwierdzono!")
+                            if b.get("email"):
+                                st.warning("⚠️ Nie udało się wysłać emaila do klientki")
+                        st.rerun()
+                with col2:
+                    if st.button("❌ Odrzuć", key=f"reject_{i}"):
+                        save_slot_to_sheet(b.get("termin",""), "wolny")
+                        update_booking_status(b.get("termin",""), b.get("imie",""), "odrzucona")
+                        for s in st.session_state.available_slots:
+                            if s["termin"] == b.get("termin"):
+                                s["zajety"] = False
+                        st.session_state.pending_bookings.pop(i)
+                        # Wyślij email do klientki
+                        sent = send_booking_status_email(b, confirmed=False)
+                        if sent:
+                            st.info(f"📧 Klientka ({b.get('email','-')}) poinformowana o odrzuceniu")
+                        elif b.get("email"):
+                            st.warning("⚠️ Nie udało się wysłać emaila do klientki")
+                        st.rerun()
+
+        if st.button("🔄 Odśwież z arkusza", key="refresh_slots"):
+            slots, pending = load_slots_from_sheet()
+            st.session_state.available_slots = slots
+            st.session_state.pending_bookings = pending
+            st.rerun()
+
         if st.button("Wyloguj", key="ologout"):
             st.session_state.owner_auth = False
             st.rerun()
@@ -696,11 +1009,37 @@ def render_chat():
     <div style="height:1px;background:rgba(245,215,118,0.1);margin-bottom:1rem;"></div>
     """, unsafe_allow_html=True)
 
+    # Pokaż dostępne terminy jeśli są
+    available = [s for s in st.session_state.get("available_slots", []) if not s["zajety"]]
+
     # Historia czatu
     for msg in messages:
         avatar = "🌸" if msg["role"] == "assistant" else "👤"
         with st.chat_message(msg["role"], avatar=avatar):
             st.markdown(msg["content"])
+
+    # Wybór terminu – pojawia się po 4+ wiadomościach jeśli są wolne terminy
+    if len(messages) >= 4 and not saved and available and not st.session_state.get("slot_chosen"):
+        st.markdown("")
+        termin_html = ('<div style="background:rgba(245,215,118,0.08);border:1px solid rgba(245,215,118,0.25);border-radius:12px;padding:12px 16px;margin:8px 0;font-size:0.88rem;color:#f8f4ed;">📅 <b style="color:#f5d776">Wybierz dostępny termin:</b></div>')
+        st.markdown(termin_html, unsafe_allow_html=True)
+        cols = st.columns(min(len(available), 3))
+        for i, s in enumerate(available):
+            with cols[i % 3]:
+                if st.button(f"🟢 {s['termin']}", key=f"slot_{i}", use_container_width=True):
+                    st.session_state.slot_chosen = s["termin"]
+                    # Oznacz termin jako tymczasowo zajęty
+                    s["zajety"] = True
+                    # Dodaj wiadomość do czatu
+                    slot_msg = f"Chciałabym zarezerwować termin: **{s['termin']}**"
+                    messages.append({"role": "user", "content": slot_msg})
+                    reply = ask_groq(
+                        messages=messages,
+                        system=KNOWLEDGE_BASE + f"\nKlientka wybrała termin: {s['termin']}. Potwierdź wybór, poproś o imię i email jeśli jeszcze nie podała, i poinformuj że właścicielka potwierdzi rezerwację."
+                    )
+                    messages.append({"role": "assistant", "content": reply})
+                    st.session_state.messages = messages
+                    st.rerun()
 
     # Przycisk zapisu + wysyłki emaili (po 5+ wiadomościach)
     if len(messages) >= 5 and not saved:
@@ -710,6 +1049,24 @@ def render_chat():
             if st.button("📩 Zapisz i wyślij podsumowanie emailem", use_container_width=True, key="save_btn"):
                 with st.spinner("Sofia przygotowuje podsumowanie..."):
                     info = extract_client_info(messages)
+                    # Dodaj wybrany termin do info
+                    if st.session_state.get("slot_chosen"):
+                        info["termin"] = st.session_state.slot_chosen
+
+                # Dodaj rezerwację do listy pending (do potwierdzenia przez właścicielkę)
+                if st.session_state.get("slot_chosen"):
+                    booking = {
+                        "imie":    info.get("imie", "?"),
+                        "email":   info.get("email", "-"),
+                        "telefon": info.get("telefon", "-"),
+                        "zabieg":  procedure,
+                        "termin":  st.session_state.slot_chosen,
+                    }
+                    if "pending_bookings" not in st.session_state:
+                        st.session_state.pending_bookings = []
+                    st.session_state.pending_bookings.append(booking)
+                    save_pending_to_sheet(booking)        # ← zapis do Sheets
+                    save_slot_to_sheet(st.session_state.slot_chosen, "zarezerwowany")  # ← blokada
 
                 # Zapisz do arkusza
                 sheet_ok = save_to_sheet(procedure, info, messages)
@@ -717,27 +1074,27 @@ def render_chat():
                 # Wyślij emaile
                 email_results = send_emails(procedure, info, messages)
 
-                # Pokaż wyniki
                 client_email = info.get("email", "")
                 if sheet_ok:
                     st.success("✅ Zapisano w Google Sheets")
                 else:
-                    st.warning("⚠️ Błąd zapisu do arkusza – sprawdź konfigurację Sheets")
+                    st.warning("⚠️ Błąd zapisu do arkusza")
 
                 if email_results.get("owner"):
-                    st.success(f"📧 Powiadomienie wysłane do właścicielki")
+                    st.success("📧 Powiadomienie wysłane do właścicielki")
                 else:
-                    err = email_results.get("owner_error", "sprawdź konfigurację Gmail w Secrets")
-                    st.warning(f"⚠️ Nie udało się wysłać do właścicielki: {err}")
+                    st.warning(f"⚠️ Email do właścicielki: {email_results.get('owner_error','błąd')}")
 
                 if client_email:
                     if email_results.get("client"):
-                        st.success(f"📧 Podsumowanie wysłane do klientki na {client_email}")
+                        st.success(f"📧 Podsumowanie wysłane na {client_email}")
                     else:
-                        err = email_results.get("client_error", "nieznany błąd")
-                        st.warning(f"⚠️ Nie udało się wysłać do klientki: {err}")
+                        st.warning(f"⚠️ Email do klientki: {email_results.get('client_error','błąd')}")
                 else:
-                    st.info("ℹ️ Klientka nie podała emaila – podsumowanie nie zostało wysłane")
+                    st.info("ℹ️ Klientka nie podała emaila")
+
+                if st.session_state.get("slot_chosen"):
+                    st.info(f"🔔 Rezerwacja **{st.session_state.slot_chosen}** czeka na potwierdzenie właścicielki")
 
                 st.session_state.saved = True
                 st.rerun()
@@ -749,13 +1106,14 @@ def render_chat():
             if st.button("← Nowa konsultacja", use_container_width=True, key="new_btn"):
                 st.session_state.messages = []
                 st.session_state.saved = False
+                st.session_state.slot_chosen = None
                 st.session_state.chat_stage = "pick"
                 st.session_state.chosen_procedure = ""
                 st.rerun()
 
     # Input klientki
     if not saved:
-        if prompt := st.chat_input(f"Napisz do Sofii..."):
+        if prompt := st.chat_input("Napisz do Sofii..."):
             messages.append({"role": "user", "content": prompt})
             with st.chat_message("user", avatar="👤"):
                 st.markdown(prompt)
@@ -775,7 +1133,13 @@ def render_chat():
 # ─────────────────────────────────────────────
 def main():
     inject_css()
-    render_sidebar()
+
+    # Wczytaj terminy z Sheets przy pierwszym uruchomieniu
+    if "slots_loaded" not in st.session_state:
+        slots, pending = load_slots_from_sheet()
+        st.session_state.available_slots = slots
+        st.session_state.pending_bookings = pending
+        st.session_state.slots_loaded = True
 
     if "chat_stage" not in st.session_state:
         st.session_state.chat_stage = "pick"
@@ -785,6 +1149,10 @@ def main():
         st.session_state.messages = []
     if "saved" not in st.session_state:
         st.session_state.saved = False
+    if "slot_chosen" not in st.session_state:
+        st.session_state.slot_chosen = None
+
+    render_sidebar()
 
     _, col, _ = st.columns([0.5, 5, 0.5])
     with col:
