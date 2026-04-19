@@ -173,148 +173,167 @@ Godziny: Pon–Pt 9:00–20:00, Sobota 9:00–16:00
 def inject_css():
     st.markdown("""
     <style>
-    @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Playfair+Display:wght@400;500&display=swap');
 
     :root {
-        --navy:   #0f1f3d;
-        --navy2:  #162847;
-        --navy3:  #1e3560;
-        --butter: #f5d776;
-        --butter2:#e8c94e;
-        --white:  #f8f4ed;
-        --muted:  rgba(248,244,237,0.55);
+        --bg:      #0a0a0a;
+        --surface: #111111;
+        --border:  #222222;
+        --border2: #2e2e2e;
+        --accent:  #e8c84a;
+        --accent2: #d4b535;
+        --text:    #f0f0f0;
+        --text2:   #999999;
+        --text3:   #666666;
     }
+
     html, body, [data-testid="stAppViewContainer"] {
-        background: var(--navy) !important;
-        color: var(--white) !important;
-        font-family: 'DM Sans', sans-serif !important;
+        background: var(--bg) !important;
+        color: var(--text) !important;
+        font-family: 'Inter', sans-serif !important;
+        font-size: 15px !important;
     }
+
     [data-testid="stSidebar"] {
-        background: var(--navy2) !important;
-        border-right: 1px solid rgba(245,215,118,0.15) !important;
+        background: var(--surface) !important;
+        border-right: 1px solid var(--border) !important;
     }
-    [data-testid="stSidebar"] * { color: var(--white) !important; }
-    [data-testid="stSidebar"] hr { border-color: rgba(245,215,118,0.15) !important; }
-    h1,h2,h3 {
-        font-family: 'DM Serif Display', serif !important;
-        color: var(--butter) !important;
+    [data-testid="stSidebar"] * {
+        color: var(--text) !important;
+        font-family: 'Inter', sans-serif !important;
     }
+
+    h1, h2, h3 {
+        font-family: 'Playfair Display', serif !important;
+        color: var(--text) !important;
+        font-weight: 500 !important;
+        letter-spacing: -0.01em;
+    }
+
+    /* Chat */
     [data-testid="stChatMessage"] {
-        background: var(--navy2) !important;
-        border: 1px solid rgba(245,215,118,0.12) !important;
-        border-radius: 16px !important;
-        margin-bottom: 0.5rem !important;
-        animation: fadeUp 0.3s ease forwards;
+        background: var(--surface) !important;
+        border: 1px solid var(--border) !important;
+        border-radius: 10px !important;
+        margin-bottom: 6px !important;
     }
     [data-testid="stChatMessage"] p,
     [data-testid="stChatMessage"] span,
     [data-testid="stChatMessage"] div,
-    [data-testid="stChatMessage"] li,
-    [data-testid="stChatMessage"] strong,
-    [data-testid="stChatMessage"] em {
-        color: #f8f4ed !important;
-        font-size: 0.97rem !important;
-        line-height: 1.7 !important;
+    [data-testid="stChatMessage"] li {
+        color: var(--text) !important;
+        font-size: 0.95rem !important;
+        line-height: 1.65 !important;
     }
     [data-testid="stChatMessage"] strong {
-        color: #f5d776 !important;
+        color: var(--text) !important;
         font-weight: 600 !important;
     }
-    @keyframes fadeUp {
-        from { opacity:0; transform: translateY(8px); }
-        to   { opacity:1; transform: translateY(0); }
-    }
+
+    /* Chat input */
     [data-testid="stChatInputTextArea"] {
-        background: var(--navy2) !important;
-        color: var(--white) !important;
-        border: 1px solid rgba(245,215,118,0.3) !important;
-        border-radius: 12px !important;
-        font-family: 'DM Sans', sans-serif !important;
+        background: var(--surface) !important;
+        color: var(--text) !important;
+        border: 1px solid var(--border2) !important;
+        border-radius: 8px !important;
+        font-family: 'Inter', sans-serif !important;
+        font-size: 0.95rem !important;
     }
+    [data-testid="stChatInputTextArea"]:focus {
+        border-color: var(--accent) !important;
+    }
+
+    /* Buttons – primary */
     .stButton > button {
-        background: var(--butter) !important;
-        color: var(--navy) !important;
+        background: var(--accent) !important;
+        color: #000 !important;
         border: none !important;
-        border-radius: 10px !important;
-        font-family: 'DM Sans', sans-serif !important;
+        border-radius: 6px !important;
+        font-family: 'Inter', sans-serif !important;
         font-weight: 500 !important;
         font-size: 0.82rem !important;
-        padding: 0.5rem 1.2rem !important;
-        transition: all 0.2s ease !important;
+        letter-spacing: 0.02em !important;
+        padding: 0.45rem 1rem !important;
+        transition: background 0.15s !important;
     }
     .stButton > button:hover {
-        background: var(--butter2) !important;
-        transform: translateY(-1px) !important;
-        box-shadow: 0 4px 16px rgba(245,215,118,0.25) !important;
+        background: var(--accent2) !important;
     }
+
+    /* Text inputs */
     .stTextInput > div > div > input {
-        background: var(--navy2) !important;
-        color: var(--white) !important;
-        border: 1px solid rgba(245,215,118,0.25) !important;
-        border-radius: 8px !important;
-        font-family: 'DM Sans', sans-serif !important;
+        background: var(--surface) !important;
+        color: var(--text) !important;
+        border: 1px solid var(--border2) !important;
+        border-radius: 6px !important;
+        font-family: 'Inter', sans-serif !important;
+        font-size: 0.9rem !important;
     }
+    .stTextInput > div > div > input::placeholder { color: var(--text3) !important; }
+    .stTextInput > div > div > input:focus {
+        border-color: var(--accent) !important;
+        outline: none !important;
+    }
+
+    /* Alerts */
+    .stAlert { background: var(--surface) !important; border-radius: 8px !important; }
+    .stAlert p { color: var(--text) !important; }
+
+    /* Procedure cards */
     .proc-card {
-        background: var(--navy2);
-        border: 1px solid rgba(245,215,118,0.15);
-        border-radius: 16px;
-        padding: 1.1rem 1.3rem;
-        margin-bottom: 0.6rem;
-        transition: all 0.2s ease;
-        animation: fadeUp 0.4s ease forwards;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 1rem 1.2rem;
+        margin-bottom: 8px;
+        transition: border-color 0.15s;
     }
-    .proc-card:hover {
-        border-color: var(--butter);
-        background: var(--navy3);
-        transform: translateY(-2px);
-        box-shadow: 0 6px 20px rgba(245,215,118,0.1);
+    .proc-card:hover { border-color: var(--border2); }
+    .proc-card .card-title {
+        font-family: 'Playfair Display', serif;
+        color: var(--text);
+        font-size: 1rem;
+        font-weight: 500;
     }
-    .proc-card .card-emoji { font-size: 1.4rem; margin-right: 0.6rem; }
-    .proc-card .card-title { font-family:'DM Serif Display',serif; color: var(--butter); font-size: 1.05rem; }
-    .proc-card .card-tag   { font-size: 0.78rem; color: var(--muted); margin-top: 2px; }
-    .proc-card .card-meta  { font-size: 0.76rem; color: var(--butter2); margin-top: 0.4rem; }
-    .promo-pill {
-        display: inline-block;
-        background: rgba(245,215,118,0.1);
-        border: 1px solid rgba(245,215,118,0.25);
-        border-radius: 20px;
-        padding: 0.25rem 0.75rem;
-        font-size: 0.75rem;
-        color: var(--butter);
-        margin: 0.15rem 0;
+    .proc-card .card-tag  { font-size: 0.78rem; color: var(--text3); margin-top: 3px; }
+    .proc-card .card-meta { font-size: 0.78rem; color: var(--text2); margin-top: 6px; }
+
+    /* Promo items */
+    .promo-item {
+        font-size: 0.82rem;
+        color: var(--text2);
+        padding: 4px 0;
+        border-bottom: 1px solid var(--border);
     }
-    hr { border-color: rgba(245,215,118,0.15) !important; }
-    ::-webkit-scrollbar { width: 4px; }
-    ::-webkit-scrollbar-thumb { background: rgba(245,215,118,0.3); border-radius: 2px; }
+
+    /* Divider */
+    hr { border-color: var(--border) !important; margin: 1rem 0 !important; }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 3px; }
+    ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
     #MainMenu, header, footer { visibility: hidden; }
     [data-testid="stDecoration"] { display: none; }
     </style>
     """, unsafe_allow_html=True)
-
 # ─────────────────────────────────────────────
 # LOGO
 # ─────────────────────────────────────────────
 def render_logo():
     st.markdown("""
-    <div style="display:flex;align-items:center;gap:18px;padding:1.8rem 0 0.8rem;">
-        <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
-            <rect width="48" height="48" rx="14" fill="#f5d776" opacity="0.12"/>
-            <path d="M24 6 L28 18 L40 18 L30 26 L34 38 L24 30 L14 38 L18 26 L8 18 L20 18 Z"
-                  fill="#f5d776" opacity="0.9"/>
-        </svg>
-        <div>
-            <div style="font-family:'DM Serif Display',serif;font-size:1.9rem;color:#f5d776;letter-spacing:0.06em;line-height:1.0;">
-                BeautyFlow
-            </div>
-            <div style="font-family:'DM Sans',sans-serif;font-size:0.65rem;letter-spacing:0.3em;
-                        color:rgba(248,244,237,0.45);text-transform:uppercase;margin-top:3px;">
-                AI Konsultant · Sofia
-            </div>
+    <div style="padding:2rem 0 1rem;">
+        <div style="font-family:'Playfair Display',serif;font-size:1.75rem;
+                    font-weight:500;color:#f0f0f0;letter-spacing:-0.02em;line-height:1.1;">
+            BeautyFlow
+        </div>
+        <div style="font-size:0.7rem;letter-spacing:0.2em;color:#555;
+                    text-transform:uppercase;margin-top:6px;">
+            Konsultant AI
         </div>
     </div>
-    <div style="height:1px;background:linear-gradient(90deg,rgba(245,215,118,0.4),transparent);margin-bottom:1.4rem;"></div>
+    <div style="height:1px;background:#1e1e1e;margin-bottom:1.5rem;"></div>
     """, unsafe_allow_html=True)
-
 # ─────────────────────────────────────────────
 # GROQ API (groq.com – darmowe!)
 # ─────────────────────────────────────────────
@@ -806,37 +825,57 @@ def update_booking_status(termin: str, imie: str, new_status: str):
 def render_sidebar():
     with st.sidebar:
         st.markdown("""
-        <div style="padding:1.2rem 0 0.6rem;text-align:center;">
-            <div style="font-family:'DM Serif Display',serif;font-size:1.3rem;color:#f5d776;">BeautyFlow</div>
-            <div style="font-size:0.6rem;letter-spacing:0.28em;color:rgba(248,244,237,0.4);text-transform:uppercase;margin-top:2px;">Premium Beauty Studio</div>
+        <div style="padding:1.5rem 0 1rem;">
+            <div style="font-family:'Playfair Display',serif;font-size:1.15rem;
+                        color:#f0f0f0;letter-spacing:-0.01em;">BeautyFlow</div>
+            <div style="font-size:0.62rem;letter-spacing:0.18em;color:#555;
+                        text-transform:uppercase;margin-top:4px;">Premium Studio</div>
         </div>
-        <div style="height:1px;background:rgba(245,215,118,0.15);margin-bottom:1rem;"></div>
+        <div style="height:1px;background:#1e1e1e;margin-bottom:1rem;"></div>
         """, unsafe_allow_html=True)
 
-        st.markdown("**📍 ul. Złota 12, Warszawa**")
-        st.markdown("📞 +48 500 123 456  \n✉️ hello@beautyflow.pl  \n🕐 Pon–Pt 9–20 · Sob 9–16")
+        st.markdown(
+            '<div style="font-size:0.82rem;color:#999;line-height:1.9;">'
+            'ul. Złota 12, Warszawa<br>'
+            '+48 500 123 456<br>'
+            'hello@beautyflow.pl<br>'
+            'Pon–Pt 9–20 · Sob 9–16'
+            '</div>', unsafe_allow_html=True
+        )
 
         st.markdown("---")
-        st.markdown("### 🎁 Promocje")
+        st.markdown(
+            '<div style="font-size:0.7rem;letter-spacing:0.15em;color:#555;'
+            'text-transform:uppercase;margin-bottom:8px;">Promocje</div>',
+            unsafe_allow_html=True
+        )
         for p in PROMOTIONS:
-            st.markdown(f'<div class="promo-pill">{p}</div>', unsafe_allow_html=True)
+            clean = p.replace("**","").replace("*","")
+            st.markdown(
+                f'<div class="promo-item">{clean}</div>',
+                unsafe_allow_html=True
+            )
 
         st.markdown("---")
         render_owner_panel()
 
         st.markdown("---")
-        groq_ok = "app" in st.secrets and "groq_api_key" in st.secrets.get("app", {})
+        groq_ok   = "app" in st.secrets and "groq_api_key" in st.secrets.get("app", {})
         sheets_ok = "gcp_service_account" in st.secrets
-        email_ok = "email" in st.secrets
+        email_ok  = "email" in st.secrets
+        dot_ok  = '<span style="color:#4caf50;font-size:0.65rem;">&#9679;</span>'
+        dot_err = '<span style="color:#f44336;font-size:0.65rem;">&#9679;</span>'
         st.markdown(
-            f"{'🟢' if groq_ok else '🔴'} Groq API  \n"
-            f"{'🟢' if sheets_ok else '🔴'} Google Sheets  \n"
-            f"{'🟢' if email_ok else '🔴'} Email (Gmail)"
+            f'<div style="font-size:0.78rem;color:#888;line-height:2;">'
+            f'{dot_ok if groq_ok else dot_err} Groq API<br>'
+            f'{dot_ok if sheets_ok else dot_err} Google Sheets<br>'
+            f'{dot_ok if email_ok else dot_err} Gmail'
+            f'</div>',
+            unsafe_allow_html=True
         )
 
-
 def render_owner_panel():
-    st.markdown("### 🔐 Panel właścicielki")
+    st.markdown('<div style="font-size:0.7rem;letter-spacing:0.15em;color:#555;text-transform:uppercase;margin-bottom:10px;">Panel właścicielki</div>', unsafe_allow_html=True)
     if "owner_auth" not in st.session_state:
         st.session_state.owner_auth = False
 
@@ -861,7 +900,7 @@ def render_owner_panel():
         st.success("✓ Zalogowano")
 
         # ── DOSTĘPNE TERMINY ──────────────────────
-        st.markdown("**📅 Wolne terminy do rezerwacji:**")
+        st.markdown('<div style="font-size:0.78rem;color:#999;margin-bottom:6px;">Wolne terminy</div>', unsafe_allow_html=True)
         slot = st.text_input("", key="nslot",
                              placeholder="np. 20.06.2025 godz. 14:00",
                              label_visibility="collapsed")
@@ -892,15 +931,15 @@ def render_owner_panel():
                 st.rerun()
 
         for s in st.session_state.get("available_slots", []):
-            ikona = "🔴" if s["zajety"] else "🟢"
-            status = " *(zarezerwowany)*" if s["zajety"] else ""
-            st.markdown(f"{ikona} {s['termin']}{status}")
+            status_dot = '<span style="color:#f44336">&#9679;</span>' if s["zajety"] else '<span style="color:#4caf50">&#9679;</span>'
+            status_txt = " — zarezerwowany" if s["zajety"] else ""
+            st.markdown(f'<div style="font-size:0.82rem;color:#ccc;padding:3px 0;">{status_dot} {s["termin"]}<span style="color:#555">{status_txt}</span></div>', unsafe_allow_html=True)
 
         # ── REZERWACJE DO POTWIERDZENIA ───────────
         pending = st.session_state.get("pending_bookings", [])
         if pending:
             st.markdown("---")
-            st.markdown(f"**🔔 Do potwierdzenia ({len(pending)}):**")
+            st.markdown(f'<div style="font-size:0.78rem;color:#999;margin-bottom:6px;">Do potwierdzenia ({len(pending)})</div>', unsafe_allow_html=True)
             for i, b in enumerate(pending):
                 st.markdown(
                     f"👤 **{b.get('imie','?')}** · {b.get('zabieg','?')}  \n"
@@ -956,12 +995,11 @@ def render_owner_panel():
 # ─────────────────────────────────────────────
 def render_procedure_picker():
     st.markdown("""
-    <div style="margin-bottom:1.5rem;">
-        <div style="font-family:'DM Serif Display',serif;font-size:1.25rem;color:#f5d776;margin-bottom:0.3rem;">
-            Na co chcesz się umówić?
-        </div>
-        <div style="font-size:0.85rem;color:rgba(248,244,237,0.5);">
-            Wybierz zabieg – Sofia przeprowadzi Cię przez krótką konsultację i wyśle podsumowanie na email.
+    <div style="margin-bottom:2rem;">
+        <div style="font-family:'Playfair Display',serif;font-size:1.3rem;
+                    color:#f0f0f0;margin-bottom:6px;">Na co chcesz się umówić?</div>
+        <div style="font-size:0.85rem;color:#666;">
+            Wybierz zabieg — Sofia przeprowadzi krótką konsultację i wyśle podsumowanie na Twój email.
         </div>
     </div>
     """, unsafe_allow_html=True)
@@ -971,25 +1009,21 @@ def render_procedure_picker():
         with cols[i % 2]:
             st.markdown(f"""
             <div class="proc-card">
-                <div>
-                    <span class="card-emoji">{p['emoji']}</span>
-                    <span class="card-title">{name}</span>
-                </div>
+                <div class="card-title">{name}</div>
                 <div class="card-tag">{p['tagline']}</div>
-                <div class="card-meta">⏱ {p['time']} &nbsp;·&nbsp; 💰 {p['price']}</div>
+                <div class="card-meta">{p['time']} &nbsp;·&nbsp; {p['price']}</div>
             </div>
             """, unsafe_allow_html=True)
-            if st.button("Wybieram →", key=f"pick_{name}", use_container_width=True):
+            if st.button("Wybierz", key=f"pick_{name}", use_container_width=True):
                 st.session_state.chosen_procedure = name
                 st.session_state.chat_stage = "chat"
                 intro = ask_groq(
                     messages=[{"role": "user", "content": f"Chcę się dowiedzieć o {name}"}],
-                    system=KNOWLEDGE_BASE + f"\nKlientka wybrała: {name}. Przywitaj się ciepło, powiedz 1-2 zdania o zabiegu i zacznij pierwsze pytanie kwalifikujące."
+                    system=KNOWLEDGE_BASE + f"\nKlientka wybrała: {name}. Przywitaj się, powiedz 1-2 zdania o zabiegu i zacznij pierwsze pytanie kwalifikujące."
                 )
                 st.session_state.messages = [{"role": "assistant", "content": intro}]
                 st.session_state.saved = False
                 st.rerun()
-
 # ─────────────────────────────────────────────
 # CZAT
 # ─────────────────────────────────────────────
@@ -1001,15 +1035,12 @@ def render_chat():
 
     # ── Nagłówek ──────────────────────────────
     st.markdown(f"""
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:1rem;">
-        <span style="font-size:1.5rem;">{p.get('emoji','✨')}</span>
-        <div>
-            <div style="font-family:'DM Serif Display',serif;font-size:1.1rem;color:#f5d776;">{procedure}</div>
-            <div style="font-size:0.75rem;color:rgba(248,244,237,0.45);">{p.get('tagline','')}</div>
-        </div>
-        <div style="margin-left:auto;font-size:0.72rem;color:rgba(248,244,237,0.35);">Sofia AI</div>
+    <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:1rem;">
+        <div style="font-family:'Playfair Display',serif;font-size:1.1rem;color:#f0f0f0;">{procedure}</div>
+        <div style="font-size:0.75rem;color:#555;">{p.get('tagline','')}</div>
+        <div style="margin-left:auto;font-size:0.7rem;color:#444;">Sofia</div>
     </div>
-    <div style="height:1px;background:rgba(245,215,118,0.1);margin-bottom:1rem;"></div>
+    <div style="height:1px;background:#1e1e1e;margin-bottom:1rem;"></div>
     """, unsafe_allow_html=True)
 
     # ── Historia czatu ─────────────────────────
