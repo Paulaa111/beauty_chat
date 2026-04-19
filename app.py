@@ -128,14 +128,17 @@ Jesteś Sofią – elegancką, empatyczną konsultantką salonu kosmetycznego Be
 Rozmawiasz WYŁĄCZNIE po polsku. Jesteś ciepła, profesjonalna, nigdy nie używasz żargonu medycznego.
 Nie wymyślasz informacji spoza poniższej bazy. Jeśli pytanie wykracza poza bazę, odsyłasz do telefonu: +48 500 123 456.
 
-WAŻNE zasady prowadzenia rozmowy:
-- Klientka wybrała już zabieg z listy – nie pytaj ponownie jaki zabieg ją interesuje.
-- Zadajesz pytania kwalifikujące STOPNIOWO – maksymalnie 1–2 naraz, naturalnie jak w rozmowie.
-- Jeśli pojawia się przeciwwskazanie – delikatnie sygnalizujesz i sugerujesz konsultację ze specjalistką.
-- Odpowiadasz na wszystkie pytania klientki korzystając z bazy poniżej.
-- Pod koniec rozmowy zapytaj o imię i adres email klientki – powiedz że wyślemy podsumowanie na jej skrzynkę.
-- Gdy klientka poda email – powiedz że zaraz wyślemy podsumowanie i że specjalistka oddzwoni.
-- Bądź naturalna, ciepła, nie nudna.
+ETAPY ROZMOWY – przestrzegaj kolejności:
+1. WYWIAD: Przywitaj się, zapytaj o imię. Zadawaj pytania kwalifikujące STOPNIOWO (1-2 naraz).
+2. PODSUMOWANIE: Po zebraniu wszystkich odpowiedzi powiedz krótko czy zabieg jest odpowiedni.
+3. REZERWACJA: Zapytaj wprost "Czy chciałaby Pani od razu zarezerwować termin?" – NIE pokazuj terminów, system zrobi to automatycznie przyciskami.
+4. EMAIL: Jeśli klientka chce rezerwację – poproś o imię (jeśli nie podała) i adres email na podsumowanie.
+5. Jeśli pojawia się przeciwwskazanie – delikatnie sygnalizuj i sugeruj konsultację ze specjalistką.
+6. Bądź naturalna, ciepła. Nie zadawaj wszystkich pytań naraz.
+
+WAŻNE: Kiedy zapytasz o rezerwację i klientka odpowie TAK – napisz dokładnie to zdanie (nic więcej):
+"SHOW_SLOTS"
+To jest sygnał dla systemu żeby pokazał przyciski z terminami.
 
 === BAZA ZABIEGÓW ===
 {chr(10).join([
@@ -992,11 +995,11 @@ def render_procedure_picker():
 # ─────────────────────────────────────────────
 def render_chat():
     procedure = st.session_state.get("chosen_procedure", "")
-    messages = st.session_state.get("messages", [])
-    saved = st.session_state.get("saved", False)
-    p = PROCEDURES.get(procedure, {})
+    messages  = st.session_state.get("messages", [])
+    saved     = st.session_state.get("saved", False)
+    p         = PROCEDURES.get(procedure, {})
 
-    # Nagłówek
+    # ── Nagłówek ──────────────────────────────
     st.markdown(f"""
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:1rem;">
         <span style="font-size:1.5rem;">{p.get('emoji','✨')}</span>
@@ -1009,51 +1012,75 @@ def render_chat():
     <div style="height:1px;background:rgba(245,215,118,0.1);margin-bottom:1rem;"></div>
     """, unsafe_allow_html=True)
 
-    # Pokaż dostępne terminy jeśli są
+    # ── Historia czatu ─────────────────────────
+    for msg in messages:
+        if msg.get("hidden"):   # ukryte wiadomości systemowe
+            continue
+        avatar = "🌸" if msg["role"] == "assistant" else "👤"
+        # Jeśli Sofia zwróciła SHOW_SLOTS – pokaż komunikat zamiast kodu
+        display_content = msg["content"]
+        if display_content.strip() == "SHOW_SLOTS":
+            display_content = "Świetnie! Oto dostępne terminy – proszę wybrać jeden:"
+        with st.chat_message(msg["role"], avatar=avatar):
+            st.markdown(display_content)
+
+    # ── Przyciski terminów ─────────────────────
+    # Pokazujemy gdy Sofia powiedziała SHOW_SLOTS i termin jeszcze nie wybrany
+    show_slots = (
+        not saved
+        and not st.session_state.get("slot_chosen")
+        and any(m["content"].strip() == "SHOW_SLOTS" for m in messages if m["role"] == "assistant")
+    )
     available = [s for s in st.session_state.get("available_slots", []) if not s["zajety"]]
 
-    # Historia czatu
-    for msg in messages:
-        avatar = "🌸" if msg["role"] == "assistant" else "👤"
-        with st.chat_message(msg["role"], avatar=avatar):
-            st.markdown(msg["content"])
+    if show_slots:
+        if available:
+            st.markdown(
+                '<div style="background:rgba(245,215,118,0.1);border:1px solid '
+                'rgba(245,215,118,0.3);border-radius:12px;padding:14px 18px;margin:8px 0;">'
+                '<span style="color:#f5d776;font-weight:500;">📅 Wybierz termin:</span></div>',
+                unsafe_allow_html=True
+            )
+            cols = st.columns(min(len(available), 3))
+            for i, s in enumerate(available):
+                with cols[i % 3]:
+                    if st.button(f"🟢 {s['termin']}", key=f"slot_{i}", use_container_width=True):
+                        # Oznacz termin tymczasowo
+                        s["zajety"] = True
+                        st.session_state.slot_chosen = s["termin"]
+                        # Dodaj wybór jako wiadomość użytkownika
+                        messages.append({"role": "user", "content": f"Wybieram termin: {s['termin']}"})
+                        # Sofia potwierdza i prosi o email
+                        reply = ask_groq(
+                            messages=messages,
+                            system=KNOWLEDGE_BASE + (
+                                f"\nKlientka wybrała termin {s['termin']}. "
+                                "Potwierdź ciepło wybór. Poproś o imię i email jeśli jeszcze nie podała "
+                                "(piszemy podsumowanie na skrzynkę). Poinformuj że właścicielka potwierdzi termin emailem."
+                            )
+                        )
+                        messages.append({"role": "assistant", "content": reply})
+                        st.session_state.messages = messages
+                        st.rerun()
+        else:
+            st.info("ℹ️ Brak dostępnych terminów – właścicielka doda je wkrótce. Możemy zapisać Twoje dane i oddzwonimy.")
 
-    # Wybór terminu – pojawia się po 4+ wiadomościach jeśli są wolne terminy
-    if len(messages) >= 4 and not saved and available and not st.session_state.get("slot_chosen"):
-        st.markdown("")
-        termin_html = ('<div style="background:rgba(245,215,118,0.08);border:1px solid rgba(245,215,118,0.25);border-radius:12px;padding:12px 16px;margin:8px 0;font-size:0.88rem;color:#f8f4ed;">📅 <b style="color:#f5d776">Wybierz dostępny termin:</b></div>')
-        st.markdown(termin_html, unsafe_allow_html=True)
-        cols = st.columns(min(len(available), 3))
-        for i, s in enumerate(available):
-            with cols[i % 3]:
-                if st.button(f"🟢 {s['termin']}", key=f"slot_{i}", use_container_width=True):
-                    st.session_state.slot_chosen = s["termin"]
-                    # Oznacz termin jako tymczasowo zajęty
-                    s["zajety"] = True
-                    # Dodaj wiadomość do czatu
-                    slot_msg = f"Chciałabym zarezerwować termin: **{s['termin']}**"
-                    messages.append({"role": "user", "content": slot_msg})
-                    reply = ask_groq(
-                        messages=messages,
-                        system=KNOWLEDGE_BASE + f"\nKlientka wybrała termin: {s['termin']}. Potwierdź wybór, poproś o imię i email jeśli jeszcze nie podała, i poinformuj że właścicielka potwierdzi rezerwację."
-                    )
-                    messages.append({"role": "assistant", "content": reply})
-                    st.session_state.messages = messages
-                    st.rerun()
-
-    # Przycisk zapisu + wysyłki emaili (po 5+ wiadomościach)
-    if len(messages) >= 5 and not saved:
+    # ── Przycisk zapisz + wyślij (po wyborze terminu lub po dłuższej rozmowie) ─
+    can_save = (
+        not saved and len(messages) >= 5
+        and (st.session_state.get("slot_chosen") or len(messages) >= 8)
+    )
+    if can_save:
         st.markdown("")
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
-            if st.button("📩 Zapisz i wyślij podsumowanie emailem", use_container_width=True, key="save_btn"):
+            if st.button("📩 Zapisz i wyślij podsumowanie", use_container_width=True, key="save_btn"):
                 with st.spinner("Sofia przygotowuje podsumowanie..."):
                     info = extract_client_info(messages)
-                    # Dodaj wybrany termin do info
                     if st.session_state.get("slot_chosen"):
                         info["termin"] = st.session_state.slot_chosen
 
-                # Dodaj rezerwację do listy pending (do potwierdzenia przez właścicielkę)
+                # Rezerwacja pending → Sheets
                 if st.session_state.get("slot_chosen"):
                     booking = {
                         "imie":    info.get("imie", "?"),
@@ -1065,16 +1092,13 @@ def render_chat():
                     if "pending_bookings" not in st.session_state:
                         st.session_state.pending_bookings = []
                     st.session_state.pending_bookings.append(booking)
-                    save_pending_to_sheet(booking)        # ← zapis do Sheets
-                    save_slot_to_sheet(st.session_state.slot_chosen, "zarezerwowany")  # ← blokada
+                    save_pending_to_sheet(booking)
+                    save_slot_to_sheet(st.session_state.slot_chosen, "zarezerwowany")
 
-                # Zapisz do arkusza
-                sheet_ok = save_to_sheet(procedure, info, messages)
-
-                # Wyślij emaile
+                sheet_ok      = save_to_sheet(procedure, info, messages)
                 email_results = send_emails(procedure, info, messages)
+                client_email  = info.get("email", "")
 
-                client_email = info.get("email", "")
                 if sheet_ok:
                     st.success("✅ Zapisano w Google Sheets")
                 else:
@@ -1099,20 +1123,21 @@ def render_chat():
                 st.session_state.saved = True
                 st.rerun()
 
+    # ── Zakończono ─────────────────────────────
     if saved:
         st.success("✅ Konsultacja zakończona i zapisana")
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
             if st.button("← Nowa konsultacja", use_container_width=True, key="new_btn"):
-                st.session_state.messages = []
-                st.session_state.saved = False
-                st.session_state.slot_chosen = None
-                st.session_state.chat_stage = "pick"
+                st.session_state.messages       = []
+                st.session_state.saved          = False
+                st.session_state.slot_chosen    = None
+                st.session_state.chat_stage     = "pick"
                 st.session_state.chosen_procedure = ""
                 st.rerun()
 
-    # Input klientki
-    if not saved:
+    # ── Input klientki ─────────────────────────
+    if not saved and not show_slots:
         if prompt := st.chat_input("Napisz do Sofii..."):
             messages.append({"role": "user", "content": prompt})
             with st.chat_message("user", avatar="👤"):
@@ -1123,10 +1148,13 @@ def render_chat():
                         messages=messages,
                         system=KNOWLEDGE_BASE + f"\nAktualnie omawiany zabieg: {procedure}"
                     )
-                st.markdown(reply)
+                # Zamień SHOW_SLOTS na ładny tekst w UI
+                display = "Świetnie! Oto dostępne terminy – proszę wybrać jeden:" if reply.strip() == "SHOW_SLOTS" else reply
+                st.markdown(display)
             messages.append({"role": "assistant", "content": reply})
             st.session_state.messages = messages
             st.rerun()
+
 
 # ─────────────────────────────────────────────
 # MAIN
