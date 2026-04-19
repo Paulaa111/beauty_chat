@@ -6,7 +6,7 @@
 # STREAMLIT SECRETS – wklej DOKŁADNIE TO w App Settings → Secrets:
 #
 # [app]
-# grok_api_key    = "xai-TWÓJ_KLUCZ"        ← z console.x.ai
+# groq_api_key    = "gsk_TWÓJ_KLUCZ"         ← z console.groq.com (darmowe!)
 # owner_password  = "TwojeHaslo123"
 # owner_email     = "wlascicielka@gmail.com" ← Twój email – tu przyjdzie powiadomienie
 #
@@ -299,27 +299,27 @@ def render_logo():
     """, unsafe_allow_html=True)
 
 # ─────────────────────────────────────────────
-# GROK API
+# GROQ API (groq.com – darmowe!)
 # ─────────────────────────────────────────────
 @st.cache_resource
-def get_grok_client():
+def get_groq_client():
     try:
         return OpenAI(
-            api_key=st.secrets["app"]["grok_api_key"],
-            base_url="https://api.x.ai/v1",
+            api_key=st.secrets["app"]["groq_api_key"],
+            base_url="https://api.groq.com/openai/v1",
         )
     except Exception as e:
-        st.error(f"❌ Brak klucza Grok API: {e}")
+        st.error(f"❌ Brak klucza Groq API: {e}")
         return None
 
 
-def ask_grok(messages: list, system: str = None) -> str:
-    client = get_grok_client()
+def ask_groq(messages: list, system: str = None) -> str:
+    client = get_groq_client()
     if not client:
         return "Przepraszam, wystąpił problem techniczny. Proszę zadzwonić: +48 500 123 456."
     try:
         resp = client.chat.completions.create(
-            model="grok-3-latest",
+            model="llama-3.3-70b-versatile",
             messages=[{"role": "system", "content": system or KNOWLEDGE_BASE}] + messages,
             max_tokens=600,
             temperature=0.72,
@@ -331,13 +331,13 @@ def ask_grok(messages: list, system: str = None) -> str:
 
 def extract_client_info(messages: list) -> dict:
     """Grok wyciąga imię, email i telefon klientki z historii rozmowy."""
-    client = get_grok_client()
+    client = get_groq_client()
     if not client:
         return {}
     try:
         history = "\n".join([f"{m['role'].upper()}: {m['content'][:150]}" for m in messages[-12:]])
         resp = client.chat.completions.create(
-            model="grok-3-latest",
+            model="llama-3.3-70b-versatile",
             messages=[{"role": "user", "content": (
                 f"Z tej rozmowy wyciągnij dane klientki.\n"
                 f"Odpowiedz TYLKO w tym formacie, bez żadnego dodatkowego tekstu:\n"
@@ -583,11 +583,11 @@ def render_sidebar():
         render_owner_panel()
 
         st.markdown("---")
-        grok_ok = "app" in st.secrets and "grok_api_key" in st.secrets.get("app", {})
+        groq_ok = "app" in st.secrets and "groq_api_key" in st.secrets.get("app", {})
         sheets_ok = "gcp_service_account" in st.secrets
         email_ok = "email" in st.secrets
         st.markdown(
-            f"{'🟢' if grok_ok else '🔴'} Grok API  \n"
+            f"{'🟢' if groq_ok else '🔴'} Groq API  \n"
             f"{'🟢' if sheets_ok else '🔴'} Google Sheets  \n"
             f"{'🟢' if email_ok else '🔴'} Email (Gmail)"
         )
@@ -666,7 +666,7 @@ def render_procedure_picker():
             if st.button("Wybieram →", key=f"pick_{name}", use_container_width=True):
                 st.session_state.chosen_procedure = name
                 st.session_state.chat_stage = "chat"
-                intro = ask_grok(
+                intro = ask_groq(
                     messages=[{"role": "user", "content": f"Chcę się dowiedzieć o {name}"}],
                     system=KNOWLEDGE_BASE + f"\nKlientka wybrała: {name}. Przywitaj się ciepło, powiedz 1-2 zdania o zabiegu i zacznij pierwsze pytanie kwalifikujące."
                 )
@@ -761,7 +761,7 @@ def render_chat():
                 st.markdown(prompt)
             with st.chat_message("assistant", avatar="🌸"):
                 with st.spinner("Sofia pisze..."):
-                    reply = ask_grok(
+                    reply = ask_groq(
                         messages=messages,
                         system=KNOWLEDGE_BASE + f"\nAktualnie omawiany zabieg: {procedure}"
                     )
