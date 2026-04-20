@@ -131,16 +131,18 @@ STYL KOMUNIKACJI:
 - Żaden żargon medyczny
 - Nie wymyślaj informacji spoza bazy
 - Pytania spoza zakresu: odsyłaj na +48 500 123 456
+- IMIĘ klientki używaj TYLKO raz – przy pierwszym przywitaniu po tym jak je poda. Potem już NIGDY nie wstawiaj imienia do wiadomości, żadnych "Aniu," ani "Dziękuję, Kasiu" – to brzmi sztucznie. Wyjątek: ostatnie pożegnanie na końcu rozmowy.
 
 ETAPY ROZMOWY (przestrzegaj kolejności, po jednym pytaniu na raz):
 1. Przywitaj się, zapytaj o imię. (1 zdanie)
-2. Zapytaj: "Czy była już Pani u nas w salonie?"
-3. Zadawaj pytania kwalifikujące po 1 sztuce, naturalnie.
-4. Po zebraniu odpowiedzi: krótko (1 zdanie) podsumuj czy zabieg jest wskazany.
-5. Zapytaj wprost: "Czy chciałaby Pani wybrać termin?"
-6. Jeśli TAK – napisz dokładnie i tylko to słowo: SHOW_SLOTS
-7. Jeśli przeciwwskazanie – zaznacz delikatnie, zaproponuj konsultację.
-8. Przed końcem poproś o email na podsumowanie.
+2. Po otrzymaniu imienia – użyj go JEDEN raz w odpowiedzi, potem zapomnij o nim.
+3. Zapytaj: "Czy była już Pani u nas w salonie?"
+4. Zadawaj pytania kwalifikujące po 1 sztuce, naturalnie.
+5. Po zebraniu odpowiedzi: krótko (1 zdanie) podsumuj czy zabieg jest wskazany.
+6. Zapytaj wprost: "Czy chciałaby Pani wybrać termin?"
+7. Jeśli TAK – napisz dokładnie i tylko to słowo: SHOW_SLOTS
+8. Jeśli przeciwwskazanie – zaznacz delikatnie, zaproponuj konsultację.
+9. Przed końcem poproś o email na podsumowanie, możesz użyć imienia po raz ostatni.
 
 {zabiegi}
 
@@ -514,64 +516,66 @@ def send_consultation_emails(procedure: str, info: dict, messages: list) -> dict
     token   = info.get("token", "")
     teraz   = datetime.now().strftime("%d.%m.%Y, %H:%M")
 
-    # ── Email do klientki ──────────────────────
+    # ── Email do klientki – styl "oczekuje na potwierdzenie" ──
     if email and "@" in email:
+        termin_line = f"<br>Proponowany termin: <strong>{termin}</strong>" if termin else ""
         html_client = f"""<!DOCTYPE html><html><head>{EMAIL_STYLE}</head><body>
         <div class="wrap">
-          <div class="hdr"><h1>BeautyFlow</h1><p>Podsumowanie konsultacji</p></div>
+          <div class="hdr"><h1>BeautyFlow</h1><p>Zgłoszenie przyjęte</p></div>
           <div class="body">
-            <p>Dziękujemy, <strong>{imie}</strong>!</p>
-            <p>Oto podsumowanie Twojej konsultacji z {teraz}.</p>
+            <p>Cześć, <strong>{imie}</strong>!</p>
+            <p>Twoje zgłoszenie dotarło do nas. Umówiłaś się na:</p>
             <div class="box">
               <strong>{procedure}</strong><br>
               Czas: {proc.get('time','—')} &nbsp;·&nbsp; Cena: {proc.get('price','—')}
-              {"<br>Wybrany termin: <strong>" + termin + "</strong>" if termin else ""}
+              {termin_line}
             </div>
-            <div class="box">{podsum}</div>
-            <div class="box">
-              <strong>Jak się przygotować:</strong><br>{proc.get('prep','—')}
-            </div>
-            <p>Nasza specjalistka potwierdzi termin wkrótce.</p>
+            <p>Specjalistka potwierdzi termin — dostaniesz osobnego maila z potwierdzeniem i wskazówkami jak się przygotować.</p>
+            <p>Masz pytania? Zadzwoń: <strong>+48 500 123 456</strong></p>
             <p style="color:#a8a49a;font-size:0.82rem;">— Zespół BeautyFlow</p>
           </div>
           <div class="ftr">ul. Złota 12, Warszawa · +48 500 123 456 · hello@beautyflow.pl</div>
         </div></body></html>"""
-        results["client"] = _send_email(email, f"BeautyFlow – podsumowanie: {procedure}", html_client)
+        results["client"] = _send_email(email, f"BeautyFlow – zgłoszenie: {procedure}", html_client)
 
-    # ── Email do właścicielki – ZAWSZE wysyłany ──
+    # ── Email do właścicielki – ZAWSZE wysyłany, z przyciskami akcji w mailu ──
     if owner_email:
-        # Przyciski akcji tylko jeśli mamy token i app_url
-        action_html = ""
         if token and app_url:
             confirm_url = f"{app_url}?action=confirm&token={token}"
             reject_url  = f"{app_url}?action=reject&token={token}"
             action_html = f"""
-            <p>Kliknij aby podjąć akcję:</p>
-            <a href="{confirm_url}" class="btn btn-ok">Potwierdź rezerwację</a>
-            <a href="{reject_url}"  class="btn btn-no">Odrzuć</a>
-            <p style="color:#a8a49a;font-size:0.78rem;margin-top:16px;">
-              Linki są jednorazowe.
+            <div style="margin:24px 0 8px;">
+              <p style="font-size:0.85rem;color:#6b6860;margin-bottom:14px;">
+                Kliknij poniżej aby podjąć decyzję — klientka automatycznie dostanie maila z odpowiedzią:
+              </p>
+              <a href="{confirm_url}" class="btn btn-ok" style="font-size:0.9rem;padding:13px 30px;">✓ Potwierdź termin</a>
+              &nbsp;&nbsp;
+              <a href="{reject_url}"  class="btn btn-no" style="font-size:0.9rem;padding:13px 30px;">✗ Odrzuć</a>
+            </div>
+            <p style="color:#a8a49a;font-size:0.75rem;margin-top:20px;">
+              Linki są jednorazowe · po kliknięciu otworzy się aplikacja i wykona akcję automatycznie.
             </p>"""
         elif termin:
-            action_html = f"<p style='color:#6b6860;'>Termin do potwierdzenia: <strong>{termin}</strong>. Zaloguj się do panelu.</p>"
+            action_html = f"<p style='color:#6b6860;'>Zaloguj się do panelu aby potwierdzić termin: <strong>{termin}</strong></p>"
+        else:
+            action_html = ""
 
         html_owner = f"""<!DOCTYPE html><html><head>{EMAIL_STYLE}</head><body>
         <div class="wrap">
-          <div class="hdr"><h1>BeautyFlow</h1><p>Nowa konsultacja</p></div>
+          <div class="hdr"><h1>BeautyFlow</h1><p>Nowa rezerwacja · {teraz}</p></div>
           <div class="body">
-            <p><strong>Nowa konsultacja</strong> — {teraz}</p>
             <div class="box">
               Imię: <strong>{imie}</strong><br>
               Email: {email or '—'} &nbsp;·&nbsp; Tel: {info.get('telefon','—')}<br>
               Zabieg: <strong>{procedure}</strong><br>
-              {"Termin: <strong>" + termin + "</strong>" if termin else "Termin: nie wybrany"}
+              {"Termin: <strong>" + termin + "</strong>" if termin else "Termin: <em>nie wybrany</em>"}
             </div>
-            <div class="box">{podsum}</div>
+            <div class="box" style="font-size:0.83rem;color:#6b6860;">{podsum}</div>
             {action_html}
           </div>
           <div class="ftr">BeautyFlow AI · System automatyczny</div>
         </div></body></html>"""
-        results["owner"] = _send_email(owner_email, f"Nowa konsultacja: {imie} — {procedure}", html_owner)
+        results["owner"] = _send_email(owner_email, f"🌿 Nowa rezerwacja: {imie} — {procedure} ({termin or 'brak terminu'})", html_owner)
 
     return results
 
@@ -585,15 +589,17 @@ def send_status_email(booking: dict, confirmed: bool) -> bool:
     termin = booking.get("termin", "—")
     proc   = PROCEDURES.get(zabieg, {})
     if confirmed:
-        subj = "BeautyFlow – Twój termin potwierdzony"
-        body = f"""<p>Twoja rezerwacja jest <strong>potwierdzona</strong>, {imie}!</p>
+        subj = "BeautyFlow – Twój termin potwierdzony ✓"
+        body = f"""<p>Twój termin jest potwierdzony!</p>
         <div class="box">
           Zabieg: <strong>{zabieg}</strong><br>
           Termin: <strong>{termin}</strong><br>
           Adres: ul. Złota 12, Warszawa
         </div>
-        <div class="box"><strong>Przygotowanie:</strong><br>{proc.get('prep','—')}</div>
-        <p>Do zobaczenia! W razie pytań: +48 500 123 456</p>"""
+        <div class="box">
+          <strong>Jak się przygotować:</strong><br>{proc.get('prep','—')}
+        </div>
+        <p>Do zobaczenia! W razie pytań: <strong>+48 500 123 456</strong></p>"""
     else:
         subj = "BeautyFlow – informacja o rezerwacji"
         body = f"""<p>Niestety wybrany termin (<strong>{termin}</strong>) nie jest już dostępny.</p>
