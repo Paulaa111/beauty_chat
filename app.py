@@ -19,8 +19,8 @@ from email.mime.text import MIMEText
 st.set_page_config(
     page_title="BeautyFlow",
     page_icon="🌿",
-    layout="wide",
-    initial_sidebar_state="expanded",
+    layout="centered",
+    initial_sidebar_state="collapsed",
 )
 
 # ─────────────────────────────────────────────
@@ -360,28 +360,51 @@ def inject_css():
     #MainMenu, header, footer { visibility: hidden; }
     [data-testid="stDecoration"] { display: none; }
 
-    /* Fix podwójnej klawiatury – ukryj domyślne labele Streamlit w sidebarze */
-    [data-testid="stSidebar"] .stTextInput label { display: none !important; }
-    [data-testid="stSidebar"] .stSelectbox label { display: none !important; }
+    /* Ukryj sidebar i jego przycisk całkowicie */
+    [data-testid="stSidebar"] { display: none !important; }
+    [data-testid="collapsedControl"] { display: none !important; }
+    button[kind="header"] { display: none !important; }
+
+    /* Responsywność mobile */
+    @media (max-width: 640px) {
+        .proc-card { padding: 0.85rem 1rem; }
+        .proc-card .name { font-size: 0.95rem; }
+    }
+
     </style>
     """, unsafe_allow_html=True)
 
 # ─────────────────────────────────────────────
 # LOGO
 # ─────────────────────────────────────────────
-def render_logo():
+def render_header():
     st.markdown("""
-    <div style="padding: 2rem 0 1.2rem;">
+    <div style="padding: 1.8rem 0 0.5rem;">
         <div style="font-family:'Cormorant',serif;font-size:2rem;font-weight:500;
                     color:#1a1a1a;letter-spacing:0.04em;line-height:1.0;">
             BeautyFlow
         </div>
         <div style="font-size:0.68rem;letter-spacing:0.22em;color:#a8a49a;
-                    text-transform:uppercase;margin-top:6px;">
+                    text-transform:uppercase;margin-top:5px;">
             Konsultant AI — Studio Urody
         </div>
-        <div class="loading-bar" style="margin-top:14px;"></div>
     </div>
+    """, unsafe_allow_html=True)
+
+    # Info salonu + promocje w jednym kompaktowym pasku
+    promo_txt = " &nbsp;·&nbsp; ".join(PROMOTIONS)
+    st.markdown(f"""
+    <div style="background:#f5f4f0;border:1px solid #e8e6e0;border-radius:10px;
+                padding:0.7rem 1.1rem;margin:0.8rem 0 1.4rem;font-size:0.78rem;
+                color:#6b6860;line-height:1.9;">
+      <span style="color:#1a1a1a;font-weight:500;">ul. Złota 12, Warszawa</span>
+      &nbsp;·&nbsp; +48 500 123 456
+      &nbsp;·&nbsp; Pon–Pt 9–20, Sob 9–16
+      <br>
+      <span style="color:#b8963e;font-size:0.73rem;">Promocje:</span>
+      <span style="color:#a8a49a;font-size:0.73rem;">{promo_txt}</span>
+    </div>
+    <div class="loading-bar"></div>
     """, unsafe_allow_html=True)
 
 # ─────────────────────────────────────────────
@@ -554,9 +577,15 @@ def send_consultation_emails(procedure: str, info: dict, messages: list) -> dict
             </div>
             <p style="color:#a8a49a;font-size:0.75rem;margin-top:20px;">
               Linki są jednorazowe · po kliknięciu otworzy się aplikacja i wykona akcję automatycznie.
+            </p>
+            <p style="margin-top:16px;">
+              <a href="{app_url}" style="font-size:0.82rem;color:#b8963e;text-decoration:none;">
+                → Otwórz panel aplikacji
+              </a>
             </p>"""
         elif termin:
-            action_html = f"<p style='color:#6b6860;'>Zaloguj się do panelu aby potwierdzić termin: <strong>{termin}</strong></p>"
+            panel_link = f'<p style="margin-top:12px;"><a href="{app_url}" style="font-size:0.82rem;color:#b8963e;text-decoration:none;">→ Otwórz panel aplikacji</a></p>' if app_url else ""
+            action_html = f"<p style='color:#6b6860;'>Zaloguj się do panelu aby potwierdzić termin: <strong>{termin}</strong></p>{panel_link}"
         else:
             action_html = ""
 
@@ -780,228 +809,179 @@ def handle_url_action():
         st.query_params.clear()
 
 # ─────────────────────────────────────────────
-# SIDEBAR
+# PANEL WŁAŚCICIELKI – na dole strony, ukryty
 # ─────────────────────────────────────────────
-def render_sidebar():
-    with st.sidebar:
-        st.markdown("""
-        <div style="padding:1.5rem 0 1rem;">
-          <div style="font-family:'Cormorant',serif;font-size:1.2rem;font-weight:500;color:#1a1a1a;">
-            BeautyFlow
-          </div>
-          <div style="font-size:0.62rem;letter-spacing:0.18em;color:#a8a49a;
-                      text-transform:uppercase;margin-top:4px;">Studio Urody</div>
-        </div>
-        <div style="height:1px;background:#e8e6e0;margin-bottom:1rem;"></div>
-        """, unsafe_allow_html=True)
+def render_owner_panel():
+    st.markdown('<div style="height:1px;background:#e8e6e0;margin:2.5rem 0 0.5rem;"></div>',
+                unsafe_allow_html=True)
 
-        st.markdown(
-            '<div style="font-size:0.82rem;color:#6b6860;line-height:2.0;">'
-            'ul. Złota 12, Warszawa<br>+48 500 123 456<br>'
-            'hello@beautyflow.pl<br>Pon–Pt 9–20 · Sob 9–16</div>',
-            unsafe_allow_html=True
-        )
-        st.markdown('<div style="height:1px;background:#e8e6e0;margin:1rem 0;"></div>', unsafe_allow_html=True)
+    with st.expander("🔒 Panel właścicielki", expanded=False):
+        if "owner_auth" not in st.session_state:
+            st.session_state.owner_auth = False
 
-        st.markdown('<div class="section-label">Aktualne promocje</div>', unsafe_allow_html=True)
-        for p in PROMOTIONS:
-            st.markdown(
-                f'<div style="font-size:0.8rem;color:#6b6860;padding:5px 0;'
-                f'border-bottom:1px solid #f0ede6;">{p}</div>',
-                unsafe_allow_html=True
+        if not st.session_state.owner_auth:
+            pw = st.text_input(
+                "Hasło",
+                type="password",
+                key="opw",
+                placeholder="Hasło dostępu...",
+                label_visibility="collapsed",
             )
+            if st.button("Zaloguj", key="ologin", use_container_width=True):
+                try:
+                    correct = st.secrets["app"]["owner_password"]
+                except Exception:
+                    correct = "admin"
+                if pw == correct:
+                    st.session_state.owner_auth = True
+                    slots, pending = load_slots_from_sheet()
+                    st.session_state.available_slots  = slots
+                    st.session_state.pending_bookings = pending
+                    st.rerun()
+                else:
+                    st.error("Nieprawidłowe hasło")
+            return
 
-        st.markdown('<div style="height:1px;background:#e8e6e0;margin:1rem 0;"></div>', unsafe_allow_html=True)
-        render_owner_panel()
+        st.markdown('<div style="font-size:0.75rem;color:#3d7a5a;margin-bottom:10px;">Zalogowano</div>',
+                    unsafe_allow_html=True)
 
-        st.markdown('<div style="height:1px;background:#e8e6e0;margin:1rem 0;"></div>', unsafe_allow_html=True)
+        # ── Status integracji ──
         groq_ok   = "app" in st.secrets and "groq_api_key" in st.secrets.get("app", {})
         sheets_ok = "gcp_service_account" in st.secrets
         email_ok  = "email" in st.secrets
         def dot(ok): return f'<span style="color:{"#3d7a5a" if ok else "#c0392b"};font-size:0.55rem;">&#9679;</span>'
         st.markdown(
-            f'<div style="font-size:0.75rem;color:#a8a49a;line-height:2.2;">'
-            f'{dot(groq_ok)} Groq API<br>{dot(sheets_ok)} Google Sheets<br>{dot(email_ok)} Gmail</div>',
+            f'<div style="font-size:0.73rem;color:#a8a49a;margin-bottom:12px;">'
+            f'{dot(groq_ok)} Groq &nbsp; {dot(sheets_ok)} Sheets &nbsp; {dot(email_ok)} Gmail</div>',
             unsafe_allow_html=True
         )
 
+        # ── Dodaj termin ──
+        st.markdown('<div style="font-size:0.78rem;font-weight:500;color:#1a1a1a;margin-bottom:6px;">Dodaj termin</div>',
+                    unsafe_allow_html=True)
 
-def render_owner_panel():
-    st.markdown('<div class="section-label">Panel właścicielki</div>', unsafe_allow_html=True)
-    if "owner_auth" not in st.session_state:
-        st.session_state.owner_auth = False
+        proc_names = list(PROCEDURES.keys())
+        sel_proc = st.selectbox("Zabieg", proc_names, key="slot_proc", label_visibility="collapsed")
 
-    if not st.session_state.owner_auth:
-        # Jeden input hasła bez dodatkowego label
-        pw = st.text_input(
-            "Hasło",
-            type="password",
-            key="opw",
-            placeholder="Hasło dostępu...",
-            label_visibility="collapsed",
-        )
-        if st.button("Zaloguj", key="ologin", use_container_width=True):
-            try:
-                correct = st.secrets["app"]["owner_password"]
-            except Exception:
-                correct = "admin"
-            if pw == correct:
-                st.session_state.owner_auth = True
+        dc1, dc2 = st.columns([3, 2])
+        with dc1:
+            slot_date = st.date_input(
+                "Data", value=date.today(), key="slot_date_picker",
+                label_visibility="collapsed", format="DD.MM.YYYY",
+            )
+        with dc2:
+            available_hours = [f"{h:02d}:{m:02d}" for h in range(9, 20) for m in [0, 30]]
+            sel_hour = st.selectbox("Godzina", available_hours, key="slot_hour_picker",
+                                    label_visibility="collapsed")
+
+        ca, cb = st.columns(2)
+        with ca:
+            if st.button("Dodaj termin", key="addslot", use_container_width=True):
+                termin_str = f"{slot_date.strftime('%d.%m.%Y')}, {sel_hour}"
+                existing = [s["termin"] for s in st.session_state.get("available_slots", [])]
+                if termin_str in existing:
+                    st.warning("Ten termin już istnieje")
+                else:
+                    new_slot = {"termin": termin_str, "zabieg": sel_proc, "zajety": False}
+                    st.session_state.available_slots.append(new_slot)
+                    save_slot(termin_str, "wolny", sel_proc)
+                    st.rerun()
+        with cb:
+            if st.button("Wyczyść wolne", key="clrslot", use_container_width=True):
+                st.session_state.available_slots = [
+                    s for s in st.session_state.available_slots if s["zajety"]
+                ]
+                try:
+                    sp = get_spreadsheet()
+                    if sp:
+                        ws = sp.worksheet("Terminy")
+                        rows = ws.get_all_records()
+                        to_delete = [i+2 for i, r in enumerate(rows) if r.get("Status") == "wolny"]
+                        for i in reversed(to_delete):
+                            ws.delete_rows(i)
+                except Exception:
+                    pass
+                st.rerun()
+
+        # ── Lista harmonogramu ──
+        slots_all = st.session_state.get("available_slots", [])
+        if slots_all:
+            st.markdown('<div style="height:1px;background:#e8e6e0;margin:10px 0 6px;"></div>',
+                        unsafe_allow_html=True)
+            by_proc = {}
+            for s in slots_all:
+                key = s.get("zabieg", "Inne")
+                by_proc.setdefault(key, []).append(s)
+            for proc_name, proc_slots in by_proc.items():
+                st.markdown(
+                    f'<div style="font-size:0.68rem;letter-spacing:0.1em;color:#a8a49a;'
+                    f'text-transform:uppercase;margin:8px 0 3px;">{proc_name}</div>',
+                    unsafe_allow_html=True
+                )
+                for s in proc_slots:
+                    dot_c  = "#c0392b" if s["zajety"] else "#3d7a5a"
+                    status = " — zajęty" if s["zajety"] else ""
+                    st.markdown(
+                        f'<div style="font-size:0.78rem;color:#6b6860;padding:2px 0;">'
+                        f'<span style="color:{dot_c};font-size:0.55rem;">&#9679;</span> '
+                        f'{s["termin"]}<span style="color:#bbb">{status}</span></div>',
+                        unsafe_allow_html=True
+                    )
+
+        # ── Rezerwacje do potwierdzenia ──
+        pending = st.session_state.get("pending_bookings", [])
+        if pending:
+            st.markdown('<div style="height:1px;background:#e8e6e0;margin:12px 0 6px;"></div>',
+                        unsafe_allow_html=True)
+            st.markdown(f'<div style="font-size:0.68rem;letter-spacing:0.15em;text-transform:uppercase;'
+                        f'color:#a8a49a;margin-bottom:8px;">Do potwierdzenia ({len(pending)})</div>',
+                        unsafe_allow_html=True)
+            for i, b in enumerate(pending):
+                st.markdown(
+                    f'<div style="font-size:0.8rem;color:#1a1a1a;line-height:1.8;'
+                    f'background:#fafaf8;border:1px solid #e8e6e0;border-radius:8px;'
+                    f'padding:8px 10px;margin-bottom:8px;">'
+                    f'<strong>{b.get("imie","?")}</strong> · '
+                    f'<span style="color:#6b6860">{b.get("zabieg","?")}</span><br>'
+                    f'<span style="color:#a8a49a">{b.get("termin","?")}</span> · '
+                    f'<span style="color:#a8a49a;font-size:0.75rem;">{b.get("email","-")}</span>'
+                    f'</div>',
+                    unsafe_allow_html=True
+                )
+                c1, c2 = st.columns(2)
+                with c1:
+                    if st.button("Potwierdź", key=f"ok_{i}", use_container_width=True):
+                        save_slot(b.get("termin",""), "zajęty")
+                        update_booking_in_sheet(b.get("token",""), "potwierdzona")
+                        for s in st.session_state.available_slots:
+                            if s["termin"] == b.get("termin"):
+                                s["zajety"] = True
+                        send_status_email(b, confirmed=True)
+                        st.session_state.pending_bookings.pop(i)
+                        st.rerun()
+                with c2:
+                    if st.button("Odrzuć", key=f"no_{i}", use_container_width=True):
+                        save_slot(b.get("termin",""), "wolny")
+                        update_booking_in_sheet(b.get("token",""), "odrzucona")
+                        for s in st.session_state.available_slots:
+                            if s["termin"] == b.get("termin"):
+                                s["zajety"] = False
+                        send_status_email(b, confirmed=False)
+                        st.session_state.pending_bookings.pop(i)
+                        st.rerun()
+
+        ca2, cb2 = st.columns(2)
+        with ca2:
+            if st.button("Odśwież", key="refresh", use_container_width=True):
                 slots, pending = load_slots_from_sheet()
                 st.session_state.available_slots  = slots
                 st.session_state.pending_bookings = pending
                 st.rerun()
-            else:
-                st.error("Nieprawidłowe hasło")
-        return
-
-    st.markdown('<div style="font-size:0.75rem;color:#3d7a5a;margin-bottom:10px;">Zalogowano</div>',
-                unsafe_allow_html=True)
-
-    # ── Dodaj termin – picker daty i godziny ──
-    st.markdown('<div style="font-size:0.75rem;color:#6b6860;margin-bottom:4px;">Dodaj termin</div>',
-                unsafe_allow_html=True)
-
-    # Selectbox zabiegu
-    proc_names = list(PROCEDURES.keys())
-    sel_proc = st.selectbox(
-        "Zabieg",
-        proc_names,
-        key="slot_proc",
-        label_visibility="collapsed",
-    )
-
-    # Date picker + time picker obok siebie
-    dc1, dc2 = st.columns([3, 2])
-    with dc1:
-        slot_date = st.date_input(
-            "Data",
-            value=date.today(),
-            key="slot_date_picker",
-            label_visibility="collapsed",
-            format="DD.MM.YYYY",
-        )
-    with dc2:
-        # Godziny dostępne co 30 min, od 9:00 do 19:30
-        available_hours = []
-        for h in range(9, 20):
-            for m in [0, 30]:
-                available_hours.append(f"{h:02d}:{m:02d}")
-        sel_hour = st.selectbox(
-            "Godzina",
-            available_hours,
-            key="slot_hour_picker",
-            label_visibility="collapsed",
-        )
-
-    ca, cb = st.columns(2)
-    with ca:
-        if st.button("Dodaj termin", key="addslot", use_container_width=True):
-            termin_str = f"{slot_date.strftime('%d.%m.%Y')}, {sel_hour}"
-            # Sprawdź duplikat
-            existing = [s["termin"] for s in st.session_state.get("available_slots", [])]
-            if termin_str in existing:
-                st.warning("Ten termin już istnieje")
-            else:
-                new_slot = {"termin": termin_str, "zabieg": sel_proc, "zajety": False}
-                st.session_state.available_slots.append(new_slot)
-                save_slot(termin_str, "wolny", sel_proc)
+        with cb2:
+            if st.button("Wyloguj", key="ologout", use_container_width=True):
+                st.session_state.owner_auth = False
                 st.rerun()
-    with cb:
-        if st.button("Wyczyść wolne", key="clrslot", use_container_width=True):
-            st.session_state.available_slots = [
-                s for s in st.session_state.available_slots if s["zajety"]
-            ]
-            try:
-                sp = get_spreadsheet()
-                if sp:
-                    ws = sp.worksheet("Terminy")
-                    rows = ws.get_all_records()
-                    to_delete = [i+2 for i, r in enumerate(rows) if r.get("Status") == "wolny"]
-                    for i in reversed(to_delete):
-                        ws.delete_rows(i)
-            except Exception:
-                pass
-            st.rerun()
 
-    # Lista harmonogramu
-    slots_all = st.session_state.get("available_slots", [])
-    if slots_all:
-        st.markdown('<div style="height:1px;background:#e8e6e0;margin:8px 0 6px;"></div>',
-                    unsafe_allow_html=True)
-        by_proc = {}
-        for s in slots_all:
-            key = s.get("zabieg", "Inne")
-            by_proc.setdefault(key, []).append(s)
-
-        for proc_name, proc_slots in by_proc.items():
-            st.markdown(
-                f'<div style="font-size:0.68rem;letter-spacing:0.12em;color:#a8a49a;'
-                f'text-transform:uppercase;margin:8px 0 4px;">{proc_name}</div>',
-                unsafe_allow_html=True
-            )
-            for s in proc_slots:
-                dot_c  = "#c0392b" if s["zajety"] else "#3d7a5a"
-                status = " — zajęty" if s["zajety"] else ""
-                st.markdown(
-                    f'<div style="font-size:0.78rem;color:#6b6860;padding:2px 0;">'
-                    f'<span style="color:{dot_c};font-size:0.55rem;">&#9679;</span> '
-                    f'{s["termin"]}<span style="color:#bbb">{status}</span></div>',
-                    unsafe_allow_html=True
-                )
-
-    # Rezerwacje do potwierdzenia
-    pending = st.session_state.get("pending_bookings", [])
-    if pending:
-        st.markdown('<div style="height:1px;background:#e8e6e0;margin:10px 0 6px;"></div>',
-                    unsafe_allow_html=True)
-        st.markdown(f'<div class="section-label">Do potwierdzenia ({len(pending)})</div>',
-                    unsafe_allow_html=True)
-        for i, b in enumerate(pending):
-            st.markdown(
-                f'<div style="font-size:0.8rem;color:#1a1a1a;line-height:1.8;'
-                f'background:#fafaf8;border:1px solid #e8e6e0;border-radius:8px;'
-                f'padding:8px 10px;margin-bottom:6px;">'
-                f'<strong>{b.get("imie","?")}</strong><br>'
-                f'<span style="color:#6b6860">{b.get("zabieg","?")}</span><br>'
-                f'<span style="color:#a8a49a">{b.get("termin","?")}</span><br>'
-                f'<span style="color:#a8a49a;font-size:0.75rem;">{b.get("email","-")}</span>'
-                f'</div>',
-                unsafe_allow_html=True
-            )
-            c1, c2 = st.columns(2)
-            with c1:
-                if st.button("Potwierdź", key=f"ok_{i}", use_container_width=True):
-                    save_slot(b.get("termin",""), "zajęty")
-                    update_booking_in_sheet(b.get("token",""), "potwierdzona")
-                    for s in st.session_state.available_slots:
-                        if s["termin"] == b.get("termin"):
-                            s["zajety"] = True
-                    send_status_email(b, confirmed=True)
-                    st.session_state.pending_bookings.pop(i)
-                    st.rerun()
-            with c2:
-                if st.button("Odrzuć", key=f"no_{i}", use_container_width=True):
-                    save_slot(b.get("termin",""), "wolny")
-                    update_booking_in_sheet(b.get("token",""), "odrzucona")
-                    for s in st.session_state.available_slots:
-                        if s["termin"] == b.get("termin"):
-                            s["zajety"] = False
-                    send_status_email(b, confirmed=False)
-                    st.session_state.pending_bookings.pop(i)
-                    st.rerun()
-
-    ca2, cb2 = st.columns(2)
-    with ca2:
-        if st.button("Odśwież", key="refresh", use_container_width=True):
-            slots, pending = load_slots_from_sheet()
-            st.session_state.available_slots  = slots
-            st.session_state.pending_bookings = pending
-            st.rerun()
-    with cb2:
-        if st.button("Wyloguj", key="ologout", use_container_width=True):
-            st.session_state.owner_auth = False
-            st.rerun()
 
 # ─────────────────────────────────────────────
 # EKRAN WYBORU ZABIEGU
@@ -1129,7 +1109,9 @@ def render_chat():
                             messages=messages,
                             system=KNOWLEDGE_BASE + (
                                 f"\nKlientka wybrała termin {s['termin']}. "
-                                "Potwierdź krótko (1-2 zdania). Poproś o email do podsumowania."
+                                "Powiedz krótko (1-2 zdania) że zgłoszenie zostało przyjęte i CZEKA NA POTWIERDZENIE przez specjalistkę — NIE mów że jest już umówiona ani że termin jest potwierdzony. "
+                                "Poproś o email do wysłania podsumowania. "
+                                "Na końcu wiadomości napisz dokładnie to zdanie: 'Gdy wszystko gotowe, kliknij przycisk „Zapisz i wyślij podsumowanie\" poniżej.'"
                             )
                         )
                         loading.empty()
@@ -1174,7 +1156,7 @@ def render_chat():
                     unsafe_allow_html=True)
         _, col_btn, _ = st.columns([1, 2, 1])
         with col_btn:
-            if st.button("💌 Zapisz i wyślij podsumowanie", use_container_width=True, key="save_btn"):
+            if st.button("Zapisz i wyślij podsumowanie", use_container_width=True, key="save_btn"):
                 loading = st.empty()
                 loading.markdown('<div class="loading-bar"></div>', unsafe_allow_html=True)
 
@@ -1251,16 +1233,15 @@ def main():
         if key not in st.session_state:
             st.session_state[key] = default
 
-    render_sidebar()
     handle_url_action()
+    render_header()
 
-    _, main_col, _ = st.columns([1, 5, 1])
-    with main_col:
-        render_logo()
-        if st.session_state.chat_stage == "pick":
-            render_picker()
-        else:
-            render_chat()
+    if st.session_state.chat_stage == "pick":
+        render_picker()
+    else:
+        render_chat()
+
+    render_owner_panel()
 
 
 if __name__ == "__main__":
