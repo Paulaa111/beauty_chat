@@ -450,7 +450,7 @@ def extract_client_info(messages: list) -> dict:
     try:
         history = "\n".join([f"{m['role'].upper()}: {m['content'][:150]}" for m in messages[-12:]])
         resp = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+            model="odel="llama-3.1-8b-instant",
             messages=[{"role": "user", "content": (
                 f"Z tej rozmowy wyciągnij dane. Odpowiedz TYLKO w tym formacie:\n"
                 f"IMIE: xxx\nEMAIL: xxx lub brak\nTELEFON: xxx lub brak\n"
