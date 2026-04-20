@@ -433,7 +433,7 @@ def ask_groq(messages: list, system: str = None) -> str:
         return "Przepraszam, problem techniczny. Proszę zadzwonić: +48 500 123 456."
     try:
         resp = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+            model="llama-3.1-8b-instant",
             messages=[{"role": "system", "content": system or KNOWLEDGE_BASE}] + messages,
             max_tokens=300,
             temperature=0.6,
