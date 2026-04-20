@@ -941,52 +941,56 @@ def render_owner_panel():
 # EKRAN WYBORU ZABIEGU
 # ─────────────────────────────────────────────
 def render_picker():
-    ph = st.empty()
-    with ph.container():
-        st.markdown("""
-        <div style="margin-bottom:2rem;">
-          <div style="font-family:'Cormorant',serif;font-size:1.6rem;font-weight:500;
-                      color:#1a1a1a;line-height:1.2;margin-bottom:8px;">
-            Na co chcesz się umówić?
-          </div>
-          <div style="font-size:0.88rem;color:#a8a49a;">
-            Wybierz zabieg — Sofia przeprowadzi krótką konsultację i wyśle podsumowanie na email.
-          </div>
-        </div>
-        """, unsafe_allow_html=True)
+    # Sprawdź czy ktoś właśnie kliknął – jeśli tak, pokaż loading i nie renderuj kart
+    if st.session_state.get("_picker_loading"):
+        name = st.session_state["_picker_loading"]
+        st.markdown('<div class="loading-bar"></div>', unsafe_allow_html=True)
+        intro = ask_groq(
+            messages=[{"role": "user", "content": f"Interesuję się zabiegiem: {name}"}],
+            system=KNOWLEDGE_BASE + f"\nKlientka wybrała: {name}. Przywitaj się, 1-2 zdania o zabiegu, zacznij pierwsze pytanie kwalifikujące."
+        )
+        st.session_state.chosen_procedure    = name
+        st.session_state.messages            = [{"role": "assistant", "content": intro}]
+        st.session_state.saved               = False
+        st.session_state.slot_chosen         = None
+        st.session_state.chat_stage          = "chat"
+        del st.session_state["_picker_loading"]
+        st.rerun()
+        return
 
-        col_a, col_b = st.columns(2, gap="medium")
-        items = list(PROCEDURES.items())
+    st.markdown("""
+    <div style="margin-bottom:2rem;">
+      <div style="font-family:'Cormorant',serif;font-size:1.6rem;font-weight:500;
+                  color:#1a1a1a;line-height:1.2;margin-bottom:8px;">
+        Na co chcesz się umówić?
+      </div>
+      <div style="font-size:0.88rem;color:#a8a49a;">
+        Wybierz zabieg — Sofia przeprowadzi krótką konsultację i wyśle podsumowanie na email.
+      </div>
+    </div>
+    """, unsafe_allow_html=True)
 
-        for idx, (name, p) in enumerate(items):
-            col = col_a if idx % 2 == 0 else col_b
-            with col:
-                st.markdown(f"""
-                <div class="proc-card">
-                  <div class="name">{name}</div>
-                  <div class="tag">{p['tagline']}</div>
-                  <div class="meta">
-                    <span>{p['time']}</span>
-                    <span>{p['price']}</span>
-                  </div>
-                </div>
-                """, unsafe_allow_html=True)
+    col_a, col_b = st.columns(2, gap="medium")
+    items = list(PROCEDURES.items())
 
-                if st.button("Wybierz →", key=f"pick_{name}", use_container_width=True):
-                    ph.empty()
-                    loading = st.empty()
-                    loading.markdown('<div class="loading-bar"></div>', unsafe_allow_html=True)
-                    intro = ask_groq(
-                        messages=[{"role": "user", "content": f"Interesuję się zabiegiem: {name}"}],
-                        system=KNOWLEDGE_BASE + f"\nKlientka wybrała: {name}. Przywitaj się, 1-2 zdania o zabiegu, zacznij pierwsze pytanie kwalifikujące."
-                    )
-                    loading.empty()
-                    st.session_state.chosen_procedure = name
-                    st.session_state.messages = [{"role": "assistant", "content": intro}]
-                    st.session_state.saved    = False
-                    st.session_state.slot_chosen = None
-                    st.session_state.chat_stage  = "chat"
-                    st.rerun()
+    for idx, (name, p) in enumerate(items):
+        col = col_a if idx % 2 == 0 else col_b
+        with col:
+            st.markdown(f"""
+            <div class="proc-card">
+              <div class="name">{name}</div>
+              <div class="tag">{p['tagline']}</div>
+              <div class="meta">
+                <span>{p['time']}</span>
+                <span>{p['price']}</span>
+              </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+            if st.button("Wybierz →", key=f"pick_{name}", use_container_width=True):
+                # Zapisz wybór i przeładuj – loading pokaże się w następnym cyklu
+                st.session_state["_picker_loading"] = name
+                st.rerun()
 
 # ─────────────────────────────────────────────
 # CZAT
