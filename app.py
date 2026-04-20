@@ -19,7 +19,7 @@ from email.mime.text import MIMEText
 st.set_page_config(
     page_title="BeautyFlow",
     page_icon="🌿",
-    layout="centered",
+    layout="wide",
     initial_sidebar_state="collapsed",
 )
 
@@ -186,6 +186,20 @@ def inject_css():
         font-family: 'Outfit', sans-serif !important;
     }
 
+    /* Ogranicz szerokość głównej treści do ~860px, wyśrodkuj */
+    [data-testid="stAppViewBlockContainer"] {
+        max-width: 860px !important;
+        padding: 0 2rem !important;
+        margin: 0 auto !important;
+    }
+
+    @media (max-width: 900px) {
+        [data-testid="stAppViewBlockContainer"] {
+            max-width: 100% !important;
+            padding: 0 1rem !important;
+        }
+    }
+
     [data-testid="stSidebar"] {
         background: var(--surface) !important;
         border-right: 1px solid var(--border) !important;
@@ -218,8 +232,8 @@ def inject_css():
     [data-testid="stChatMessage"] div,
     [data-testid="stChatMessage"] li {
         color: var(--text) !important;
-        font-size: 0.95rem !important;
-        line-height: 1.7 !important;
+        font-size: 1.05rem !important;
+        line-height: 1.75 !important;
     }
     [data-testid="stChatMessage"] strong {
         color: var(--accent2) !important;
@@ -232,7 +246,7 @@ def inject_css():
         border: 1px solid var(--border2) !important;
         border-radius: 10px !important;
         font-family: 'Outfit', sans-serif !important;
-        font-size: 0.95rem !important;
+        font-size: 1.05rem !important;
         box-shadow: 0 1px 4px rgba(0,0,0,0.05) !important;
     }
     [data-testid="stChatInputTextArea"]:focus {
@@ -248,9 +262,9 @@ def inject_css():
         border-radius: 8px !important;
         font-family: 'Outfit', sans-serif !important;
         font-weight: 500 !important;
-        font-size: 0.82rem !important;
+        font-size: 0.92rem !important;
         letter-spacing: 0.03em !important;
-        padding: 0.5rem 1.1rem !important;
+        padding: 0.55rem 1.2rem !important;
         transition: background 0.15s, transform 0.1s !important;
     }
     .stButton > button:hover {
@@ -299,8 +313,8 @@ def inject_css():
         background: var(--surface);
         border: 1px solid var(--border);
         border-radius: 12px;
-        padding: 1.1rem 1.25rem;
-        margin-bottom: 10px;
+        padding: 1.3rem 1.5rem;
+        margin-bottom: 12px;
         transition: box-shadow 0.2s, border-color 0.2s;
         cursor: default;
     }
@@ -310,23 +324,23 @@ def inject_css():
     }
     .proc-card .name  {
         font-family: 'Cormorant', serif;
-        font-size: 1.05rem;
+        font-size: 1.2rem;
         font-weight: 500;
         color: var(--text);
-        margin-bottom: 3px;
+        margin-bottom: 4px;
     }
-    .proc-card .tag   { font-size: 0.78rem; color: var(--text3); }
+    .proc-card .tag   { font-size: 0.86rem; color: var(--text3); }
     .proc-card .meta  {
-        font-size: 0.78rem;
+        font-size: 0.84rem;
         color: var(--text2);
-        margin-top: 8px;
+        margin-top: 10px;
         display: flex;
         gap: 12px;
     }
     .proc-card .meta span {
         background: var(--surface2);
         border-radius: 4px;
-        padding: 2px 8px;
+        padding: 3px 10px;
     }
 
     .section-label {
@@ -379,30 +393,29 @@ def inject_css():
 # ─────────────────────────────────────────────
 def render_header():
     st.markdown("""
-    <div style="padding: 1.8rem 0 0.5rem;">
-        <div style="font-family:'Cormorant',serif;font-size:2rem;font-weight:500;
+    <div style="padding: 2rem 0 0.6rem;">
+        <div style="font-family:'Cormorant',serif;font-size:2.6rem;font-weight:500;
                     color:#1a1a1a;letter-spacing:0.04em;line-height:1.0;">
             BeautyFlow
         </div>
-        <div style="font-size:0.68rem;letter-spacing:0.22em;color:#a8a49a;
-                    text-transform:uppercase;margin-top:5px;">
+        <div style="font-size:0.75rem;letter-spacing:0.22em;color:#a8a49a;
+                    text-transform:uppercase;margin-top:7px;">
             Konsultant AI — Studio Urody
         </div>
     </div>
     """, unsafe_allow_html=True)
 
-    # Info salonu + promocje w jednym kompaktowym pasku
     promo_txt = " &nbsp;·&nbsp; ".join(PROMOTIONS)
     st.markdown(f"""
     <div style="background:#f5f4f0;border:1px solid #e8e6e0;border-radius:10px;
-                padding:0.7rem 1.1rem;margin:0.8rem 0 1.4rem;font-size:0.78rem;
-                color:#6b6860;line-height:1.9;">
+                padding:0.85rem 1.3rem;margin:1rem 0 1.6rem;font-size:0.88rem;
+                color:#6b6860;line-height:2.0;">
       <span style="color:#1a1a1a;font-weight:500;">ul. Złota 12, Warszawa</span>
       &nbsp;·&nbsp; +48 500 123 456
       &nbsp;·&nbsp; Pon–Pt 9–20, Sob 9–16
       <br>
-      <span style="color:#b8963e;font-size:0.73rem;">Promocje:</span>
-      <span style="color:#a8a49a;font-size:0.73rem;">{promo_txt}</span>
+      <span style="color:#b8963e;font-size:0.8rem;">Promocje:</span>
+      <span style="color:#a8a49a;font-size:0.8rem;">{promo_txt}</span>
     </div>
     <div class="loading-bar"></div>
     """, unsafe_allow_html=True)
@@ -1005,11 +1018,11 @@ def render_picker():
 
     st.markdown("""
     <div style="margin-bottom:2rem;">
-      <div style="font-family:'Cormorant',serif;font-size:1.6rem;font-weight:500;
-                  color:#1a1a1a;line-height:1.2;margin-bottom:8px;">
+      <div style="font-family:'Cormorant',serif;font-size:2rem;font-weight:500;
+                  color:#1a1a1a;line-height:1.2;margin-bottom:10px;">
         Na co chcesz się umówić?
       </div>
-      <div style="font-size:0.88rem;color:#a8a49a;">
+      <div style="font-size:1rem;color:#a8a49a;">
         Wybierz zabieg — Sofia przeprowadzi krótką konsultację i wyśle podsumowanie na email.
       </div>
     </div>
@@ -1050,10 +1063,10 @@ def render_chat():
     with col_title:
         st.markdown(f"""
         <div style="margin-bottom:1rem;">
-          <div style="font-family:'Cormorant',serif;font-size:1.3rem;font-weight:500;color:#1a1a1a;">
+          <div style="font-family:'Cormorant',serif;font-size:1.6rem;font-weight:500;color:#1a1a1a;">
             {procedure}
           </div>
-          <div style="font-size:0.78rem;color:#a8a49a;margin-top:3px;">{p.get('tagline','')} · Sofia</div>
+          <div style="font-size:0.9rem;color:#a8a49a;margin-top:3px;">{p.get('tagline','')} · Sofia</div>
         </div>
         """, unsafe_allow_html=True)
     with col_back:
@@ -1212,7 +1225,7 @@ def render_chat():
                 st.session_state.chat_stage      = "pick"
                 st.session_state.chosen_procedure = ""
                 st.rerun()
-        return
+        # NIE ma return tutaj – żeby render_owner_panel() w main() zawsze się wykonał
 
 # ─────────────────────────────────────────────
 # MAIN
