@@ -148,12 +148,13 @@ Nie wymyślaj informacji spoza bazy poniżej. Pytania wykraczające poza bazę o
 
 ETAPY ROZMOWY – przestrzegaj kolejności:
 1. Przywitaj się, zapytaj o imię.
-2. Prowadź wywiad – pytania kwalifikujące STOPNIOWO, 1–2 naraz, naturalnie.
-3. Po zebraniu odpowiedzi krótko podsumuj czy zabieg jest wskazany.
-4. Zapytaj wprost: "Czy chciałaby Pani od razu wybrać termin?"
-5. Jeśli TAK – napisz dokładnie i tylko to słowo: SHOW_SLOTS
-6. Jeśli pojawi się przeciwwskazanie – zaznacz delikatnie, zaproponuj konsultację.
-7. Przed końcem poproś o imię (jeśli nie podała) i email na podsumowanie.
+2. ZAWSZE jako drugie pytanie zapytaj: "Czy była już Pani u nas w salonie?" – to ważne dla specjalistki.
+3. Prowadź wywiad – pytania kwalifikujące STOPNIOWO, 1–2 naraz, naturalnie.
+4. Po zebraniu odpowiedzi krótko podsumuj czy zabieg jest wskazany.
+5. Zapytaj wprost: "Czy chciałaby Pani od razu wybrać termin?"
+6. Jeśli TAK – napisz dokładnie i tylko to słowo: SHOW_SLOTS
+7. Jeśli pojawi się przeciwwskazanie – zaznacz delikatnie, zaproponuj konsultację.
+8. Przed końcem poproś o imię (jeśli nie podała) i email na podsumowanie.
 
 {zabiegi}
 
@@ -667,7 +668,7 @@ def load_slots_from_sheet():
             return [], []
         ws_t = _get_ws(sp, "Terminy",    ["Termin", "Status"])
         ws_r = _get_ws(sp, "Rezerwacje", ["Data", "Token", "Termin", "Imię", "Email", "Telefon", "Zabieg", "Status"])
-        slots   = [{"termin": r["Termin"], "zajety": r.get("Status","wolny") != "wolny"}
+        slots   = [{"termin": r["Termin"], "zabieg": r.get("Zabieg",""), "zajety": r.get("Status","wolny") != "wolny"}
                    for r in ws_t.get_all_records() if r.get("Termin")]
         pending = [{"token": r.get("Token",""), "imie": r.get("Imię","?"), "email": r.get("Email",""),
                     "telefon": r.get("Telefon",""), "zabieg": r.get("Zabieg",""), "termin": r.get("Termin","")}
@@ -677,18 +678,18 @@ def load_slots_from_sheet():
         return [], []
 
 
-def save_slot(termin: str, status: str = "wolny"):
+def save_slot(termin: str, status: str = "wolny", zabieg: str = ""):
     try:
         sp = get_spreadsheet()
         if not sp:
             return
-        ws = _get_ws(sp, "Terminy", ["Termin", "Status"])
+        ws = _get_ws(sp, "Terminy", ["Termin", "Zabieg", "Status"])
         rows = ws.get_all_records()
         for i, r in enumerate(rows, start=2):
             if r.get("Termin") == termin:
-                ws.update(f"B{i}", [[status]])
+                ws.update(f"C{i}", [[status]])
                 return
-        ws.append_row([termin, status])
+        ws.append_row([termin, zabieg, status])
     except Exception:
         pass
 
@@ -844,23 +845,42 @@ def render_owner_panel():
                 st.error("Nieprawidłowe hasło")
         return
 
-    # Zalogowano
-    st.markdown('<div style="font-size:0.78rem;color:#3d7a5a;margin-bottom:10px;">Zalogowano</div>',
+    st.markdown('<div style="font-size:0.75rem;color:#3d7a5a;margin-bottom:10px;">Zalogowano</div>',
                 unsafe_allow_html=True)
 
-    # ── Dodaj termin ──
-    st.markdown('<div style="font-size:0.78rem;color:#6b6860;margin-bottom:4px;">Dodaj wolny termin</div>',
+    # ── Dodaj termin do harmonogramu ──────────
+    st.markdown('<div style="font-size:0.75rem;color:#6b6860;margin-bottom:6px;">Dodaj termin</div>',
                 unsafe_allow_html=True)
-    slot = st.text_input("", key="nslot", placeholder="np. 20.06.2025 godz. 14:00",
-                         label_visibility="collapsed")
-    c1, c2 = st.columns(2)
-    with c1:
-        if st.button("Dodaj", key="addslot", use_container_width=True) and slot.strip():
-            st.session_state.available_slots.append({"termin": slot.strip(), "zajety": False})
-            save_slot(slot.strip(), "wolny")
-            st.rerun()
-    with c2:
-        if st.button("Wyczyść", key="clrslot", use_container_width=True):
+
+    # Wybór zabiegu
+    proc_names = list(PROCEDURES.keys())
+    sel_proc = st.selectbox("Zabieg", proc_names, key="slot_proc",
+                            label_visibility="collapsed")
+
+    # Data i godzina w dwóch kolumnach
+    dc1, dc2 = st.columns([3, 2])
+    with dc1:
+        slot_date = st.text_input("", key="slot_date",
+                                  placeholder="dd.mm.rrrr",
+                                  label_visibility="collapsed")
+    with dc2:
+        slot_hour = st.text_input("", key="slot_hour",
+                                  placeholder="godz. HH:MM",
+                                  label_visibility="collapsed")
+
+    ca, cb = st.columns(2)
+    with ca:
+        if st.button("Dodaj", key="addslot", use_container_width=True):
+            if slot_date.strip() and slot_hour.strip():
+                termin_str = f"{slot_date.strip()}, {slot_hour.strip()}"
+                new_slot = {"termin": termin_str, "zabieg": sel_proc, "zajety": False}
+                st.session_state.available_slots.append(new_slot)
+                save_slot(termin_str, "wolny", sel_proc)
+                st.rerun()
+            else:
+                st.warning("Wpisz datę i godzinę")
+    with cb:
+        if st.button("Wyczyść wolne", key="clrslot", use_container_width=True):
             st.session_state.available_slots = [
                 s for s in st.session_state.available_slots if s["zajety"]
             ]
@@ -869,28 +889,46 @@ def render_owner_panel():
                 if sp:
                     ws = sp.worksheet("Terminy")
                     rows = ws.get_all_records()
-                    for i, r in enumerate(rows, start=2):
-                        if r.get("Status") == "wolny":
-                            ws.delete_rows(i)
+                    # Usuń od końca żeby nie przesuwać indeksów
+                    to_delete = [i+2 for i, r in enumerate(rows) if r.get("Status") == "wolny"]
+                    for i in reversed(to_delete):
+                        ws.delete_rows(i)
             except Exception:
                 pass
             st.rerun()
 
-    # Lista terminów
-    for s in st.session_state.get("available_slots", []):
-        dot_c  = "#c0392b" if s["zajety"] else "#3d7a5a"
-        status = " (zajęty)" if s["zajety"] else ""
-        st.markdown(
-            f'<div style="font-size:0.78rem;color:#6b6860;padding:3px 0;">'
-            f'<span style="color:{dot_c};font-size:0.55rem;">&#9679;</span> '
-            f'{s["termin"]}<span style="color:#a8a49a">{status}</span></div>',
-            unsafe_allow_html=True
-        )
+    # Lista harmonogramu – pogrupowana po zabiegu
+    slots_all = st.session_state.get("available_slots", [])
+    if slots_all:
+        st.markdown('<div style="height:1px;background:#e8e6e0;margin:8px 0 6px;"></div>',
+                    unsafe_allow_html=True)
+        # Grupuj po zabiegu
+        by_proc = {}
+        for s in slots_all:
+            key = s.get("zabieg", "Inne")
+            by_proc.setdefault(key, []).append(s)
+
+        for proc_name, proc_slots in by_proc.items():
+            st.markdown(
+                f'<div style="font-size:0.68rem;letter-spacing:0.12em;color:#a8a49a;'
+                f'text-transform:uppercase;margin:8px 0 4px;">{proc_name}</div>',
+                unsafe_allow_html=True
+            )
+            for s in proc_slots:
+                dot_c  = "#c0392b" if s["zajety"] else "#3d7a5a"
+                status = " — zajęty" if s["zajety"] else ""
+                st.markdown(
+                    f'<div style="font-size:0.78rem;color:#6b6860;padding:2px 0;">'
+                    f'<span style="color:{dot_c};font-size:0.55rem;">&#9679;</span> '
+                    f'{s["termin"]}<span style="color:#bbb">{status}</span></div>',
+                    unsafe_allow_html=True
+                )
 
     # ── Rezerwacje do potwierdzenia ──
     pending = st.session_state.get("pending_bookings", [])
     if pending:
-        st.markdown('<div style="height:1px;background:#e8e6e0;margin:10px 0;"></div>', unsafe_allow_html=True)
+        st.markdown('<div style="height:1px;background:#e8e6e0;margin:10px 0 6px;"></div>',
+                    unsafe_allow_html=True)
         st.markdown(f'<div class="section-label">Do potwierdzenia ({len(pending)})</div>',
                     unsafe_allow_html=True)
         for i, b in enumerate(pending):
@@ -898,8 +936,10 @@ def render_owner_panel():
                 f'<div style="font-size:0.8rem;color:#1a1a1a;line-height:1.8;'
                 f'background:#fafaf8;border:1px solid #e8e6e0;border-radius:8px;'
                 f'padding:8px 10px;margin-bottom:6px;">'
-                f'<strong>{b.get("imie","?")}</strong> — {b.get("zabieg","?")}<br>'
-                f'<span style="color:#6b6860">{b.get("termin","?")} · {b.get("email","-")}</span>'
+                f'<strong>{b.get("imie","?")}</strong><br>'
+                f'<span style="color:#6b6860">{b.get("zabieg","?")}</span><br>'
+                f'<span style="color:#a8a49a">{b.get("termin","?")}</span><br>'
+                f'<span style="color:#a8a49a;font-size:0.75rem;">{b.get("email","-")}</span>'
                 f'</div>',
                 unsafe_allow_html=True
             )
@@ -925,18 +965,17 @@ def render_owner_panel():
                     st.session_state.pending_bookings.pop(i)
                     st.rerun()
 
-    c1, c2 = st.columns(2)
-    with c1:
+    ca2, cb2 = st.columns(2)
+    with ca2:
         if st.button("Odśwież", key="refresh", use_container_width=True):
             slots, pending = load_slots_from_sheet()
             st.session_state.available_slots  = slots
             st.session_state.pending_bookings = pending
             st.rerun()
-    with c2:
+    with cb2:
         if st.button("Wyloguj", key="ologout", use_container_width=True):
             st.session_state.owner_auth = False
             st.rerun()
-
 # ─────────────────────────────────────────────
 # EKRAN WYBORU ZABIEGU
 # ─────────────────────────────────────────────
@@ -1039,7 +1078,11 @@ def render_chat():
         and any(m["content"].strip() == "SHOW_SLOTS"
                 for m in messages if m["role"] == "assistant")
     )
-    available = [s for s in st.session_state.get("available_slots", []) if not s["zajety"]]
+    # Filtruj terminy – tylko pasujące do wybranego zabiegu (lub bez przypisanego)
+    available = [
+        s for s in st.session_state.get("available_slots", [])
+        if not s["zajety"] and (not s.get("zabieg") or s.get("zabieg") == procedure)
+    ]
 
     if show_slots:
         if available:
