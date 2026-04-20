@@ -186,7 +186,6 @@ def inject_css():
         font-family: 'Outfit', sans-serif !important;
     }
 
-    /* Ogranicz szerokość głównej treści do ~860px, wyśrodkuj */
     [data-testid="stAppViewBlockContainer"] {
         max-width: 860px !important;
         padding: 0 2rem !important;
@@ -200,13 +199,24 @@ def inject_css():
         }
     }
 
+    /* ── SIDEBAR – widoczny i stylowany ── */
     [data-testid="stSidebar"] {
         background: var(--surface) !important;
         border-right: 1px solid var(--border) !important;
+        display: flex !important;
     }
     [data-testid="stSidebar"] * {
         color: var(--text) !important;
         font-family: 'Outfit', sans-serif !important;
+    }
+    /* Przycisk wysuwania sidebara zawsze widoczny */
+    [data-testid="collapsedControl"] {
+        display: flex !important;
+        visibility: visible !important;
+    }
+    button[kind="header"] {
+        display: flex !important;
+        visibility: visible !important;
     }
 
     h1, h2, h3 {
@@ -254,7 +264,6 @@ def inject_css():
         box-shadow: 0 0 0 3px rgba(184,150,62,0.1) !important;
     }
 
-    /* ── Wszystkie przyciski z pełnym kontrastem ── */
     .stButton > button {
         background: var(--accent) !important;
         color: #ffffff !important;
@@ -292,7 +301,6 @@ def inject_css():
         box-shadow: 0 0 0 3px rgba(184,150,62,0.08) !important;
     }
 
-    /* Date/time inputs w sidebarze */
     [data-testid="stSidebar"] [data-testid="stDateInput"] input,
     [data-testid="stSidebar"] [data-testid="stTimeInput"] input {
         background: var(--surface) !important;
@@ -303,7 +311,6 @@ def inject_css():
         font-family: 'Outfit', sans-serif !important;
     }
 
-    /* Ukryj label date/time inputów (używamy własnych) */
     [data-testid="stSidebar"] [data-testid="stDateInput"] label,
     [data-testid="stSidebar"] [data-testid="stTimeInput"] label {
         display: none !important;
@@ -343,15 +350,6 @@ def inject_css():
         padding: 3px 10px;
     }
 
-    .section-label {
-        font-size: 0.68rem;
-        letter-spacing: 0.15em;
-        text-transform: uppercase;
-        color: var(--text3);
-        margin-bottom: 10px;
-        margin-top: 4px;
-    }
-
     @keyframes shimmer {
         0%   { background-position: -200% 0; }
         100% { background-position:  200% 0; }
@@ -374,22 +372,9 @@ def inject_css():
     #MainMenu, header, footer { visibility: hidden; }
     [data-testid="stDecoration"] { display: none; }
 
-    /* Ukryj sidebar i jego przycisk całkowicie */
-    [data-testid="stSidebar"] { display: none !important; }
-    [data-testid="collapsedControl"] { display: none !important; }
-    button[kind="header"] { display: none !important; }
-
-    /* Responsywność mobile */
     @media (max-width: 640px) {
         .proc-card { padding: 0.85rem 1rem; }
         .proc-card .name { font-size: 0.95rem; }
-    }
-
-    /* ── Panel właścicielki – zawsze na samym dole ── */
-    .owner-panel-wrapper {
-        margin-top: 4rem;
-        padding-top: 0.5rem;
-        border-top: 1px solid var(--border);
     }
 
     </style>
@@ -825,13 +810,23 @@ def handle_url_action():
         st.query_params.clear()
 
 # ─────────────────────────────────────────────
-# PANEL WŁAŚCICIELKI – zawsze na samym dole
+# PANEL WŁAŚCICIELKI – w sidebarze (wysuwany)
 # ─────────────────────────────────────────────
 def render_owner_panel():
-    # Wrapper z dużym marginesem – odseparowany od czatu
-    st.markdown('<div class="owner-panel-wrapper"></div>', unsafe_allow_html=True)
+    with st.sidebar:
+        st.markdown("""
+        <div style="padding: 1rem 0 0.6rem;">
+          <div style="font-family:'Cormorant',serif;font-size:1.4rem;font-weight:500;color:#1a1a1a;">
+            BeautyFlow
+          </div>
+          <div style="font-size:0.62rem;letter-spacing:0.18em;color:#a8a49a;
+                      text-transform:uppercase;margin-top:4px;margin-bottom:14px;">
+            Panel właścicielki
+          </div>
+        </div>
+        <div style="height:1px;background:#e8e6e0;margin-bottom:1rem;"></div>
+        """, unsafe_allow_html=True)
 
-    with st.expander("🔒 Panel właścicielki", expanded=False):
         if "owner_auth" not in st.session_state:
             st.session_state.owner_auth = False
 
@@ -858,7 +853,7 @@ def render_owner_panel():
                     st.error("Nieprawidłowe hasło")
             return
 
-        st.markdown('<div style="font-size:0.75rem;color:#3d7a5a;margin-bottom:10px;">Zalogowano</div>',
+        st.markdown('<div style="font-size:0.74rem;color:#3d7a5a;margin-bottom:10px;">✓ Zalogowano</div>',
                     unsafe_allow_html=True)
 
         # ── Status integracji ──
@@ -867,13 +862,13 @@ def render_owner_panel():
         email_ok  = "email" in st.secrets
         def dot(ok): return f'<span style="color:{"#3d7a5a" if ok else "#c0392b"};font-size:0.55rem;">&#9679;</span>'
         st.markdown(
-            f'<div style="font-size:0.73rem;color:#a8a49a;margin-bottom:12px;">'
+            f'<div style="font-size:0.72rem;color:#a8a49a;margin-bottom:14px;">'
             f'{dot(groq_ok)} Groq &nbsp; {dot(sheets_ok)} Sheets &nbsp; {dot(email_ok)} Gmail</div>',
             unsafe_allow_html=True
         )
 
         # ── Dodaj termin ──
-        st.markdown('<div style="font-size:0.78rem;font-weight:500;color:#1a1a1a;margin-bottom:6px;">Dodaj termin</div>',
+        st.markdown('<div style="font-size:0.76rem;font-weight:500;color:#1a1a1a;margin-bottom:6px;">Dodaj termin</div>',
                     unsafe_allow_html=True)
 
         proc_names = list(PROCEDURES.keys())
@@ -892,7 +887,7 @@ def render_owner_panel():
 
         ca, cb = st.columns(2)
         with ca:
-            if st.button("Dodaj termin", key="addslot", use_container_width=True):
+            if st.button("Dodaj", key="addslot", use_container_width=True):
                 termin_str = f"{slot_date.strftime('%d.%m.%Y')}, {sel_hour}"
                 existing = [s["termin"] for s in st.session_state.get("available_slots", [])]
                 if termin_str in existing:
@@ -903,7 +898,7 @@ def render_owner_panel():
                     save_slot(termin_str, "wolny", sel_proc)
                     st.rerun()
         with cb:
-            if st.button("Wyczyść wolne", key="clrslot", use_container_width=True):
+            if st.button("Wyczyść", key="clrslot", use_container_width=True):
                 st.session_state.available_slots = [
                     s for s in st.session_state.available_slots if s["zajety"]
                 ]
@@ -919,7 +914,7 @@ def render_owner_panel():
                     pass
                 st.rerun()
 
-        # ── Lista harmonogramu ──
+        # ── Lista terminów ──
         slots_all = st.session_state.get("available_slots", [])
         if slots_all:
             st.markdown('<div style="height:1px;background:#e8e6e0;margin:10px 0 6px;"></div>',
@@ -930,7 +925,7 @@ def render_owner_panel():
                 by_proc.setdefault(key, []).append(s)
             for proc_name, proc_slots in by_proc.items():
                 st.markdown(
-                    f'<div style="font-size:0.68rem;letter-spacing:0.1em;color:#a8a49a;'
+                    f'<div style="font-size:0.63rem;letter-spacing:0.1em;color:#a8a49a;'
                     f'text-transform:uppercase;margin:8px 0 3px;">{proc_name}</div>',
                     unsafe_allow_html=True
                 )
@@ -938,7 +933,7 @@ def render_owner_panel():
                     dot_c  = "#c0392b" if s["zajety"] else "#3d7a5a"
                     status = " — zajęty" if s["zajety"] else ""
                     st.markdown(
-                        f'<div style="font-size:0.78rem;color:#6b6860;padding:2px 0;">'
+                        f'<div style="font-size:0.75rem;color:#6b6860;padding:2px 0;">'
                         f'<span style="color:{dot_c};font-size:0.55rem;">&#9679;</span> '
                         f'{s["termin"]}<span style="color:#bbb">{status}</span></div>',
                         unsafe_allow_html=True
@@ -949,24 +944,23 @@ def render_owner_panel():
         if pending:
             st.markdown('<div style="height:1px;background:#e8e6e0;margin:12px 0 6px;"></div>',
                         unsafe_allow_html=True)
-            st.markdown(f'<div style="font-size:0.68rem;letter-spacing:0.15em;text-transform:uppercase;'
+            st.markdown(f'<div style="font-size:0.63rem;letter-spacing:0.15em;text-transform:uppercase;'
                         f'color:#a8a49a;margin-bottom:8px;">Do potwierdzenia ({len(pending)})</div>',
                         unsafe_allow_html=True)
             for i, b in enumerate(pending):
                 st.markdown(
-                    f'<div style="font-size:0.8rem;color:#1a1a1a;line-height:1.8;'
+                    f'<div style="font-size:0.76rem;color:#1a1a1a;line-height:1.7;'
                     f'background:#fafaf8;border:1px solid #e8e6e0;border-radius:8px;'
                     f'padding:8px 10px;margin-bottom:8px;">'
-                    f'<strong>{b.get("imie","?")}</strong> · '
-                    f'<span style="color:#6b6860">{b.get("zabieg","?")}</span><br>'
-                    f'<span style="color:#a8a49a">{b.get("termin","?")}</span> · '
-                    f'<span style="color:#a8a49a;font-size:0.75rem;">{b.get("email","-")}</span>'
+                    f'<strong>{b.get("imie","?")}</strong><br>'
+                    f'<span style="color:#6b6860;font-size:0.70rem;">{b.get("zabieg","?")}</span><br>'
+                    f'<span style="color:#a8a49a;font-size:0.70rem;">{b.get("termin","?")}</span>'
                     f'</div>',
                     unsafe_allow_html=True
                 )
                 c1, c2 = st.columns(2)
                 with c1:
-                    if st.button("Potwierdź", key=f"ok_{i}", use_container_width=True):
+                    if st.button("✓ Potwierdź", key=f"ok_{i}", use_container_width=True):
                         save_slot(b.get("termin",""), "zajęty")
                         update_booking_in_sheet(b.get("token",""), "potwierdzona")
                         for s in st.session_state.available_slots:
@@ -976,7 +970,7 @@ def render_owner_panel():
                         st.session_state.pending_bookings.pop(i)
                         st.rerun()
                 with c2:
-                    if st.button("Odrzuć", key=f"no_{i}", use_container_width=True):
+                    if st.button("✗ Odrzuć", key=f"no_{i}", use_container_width=True):
                         save_slot(b.get("termin",""), "wolny")
                         update_booking_in_sheet(b.get("token",""), "odrzucona")
                         for s in st.session_state.available_slots:
@@ -986,6 +980,8 @@ def render_owner_panel():
                         st.session_state.pending_bookings.pop(i)
                         st.rerun()
 
+        st.markdown('<div style="height:1px;background:#e8e6e0;margin:14px 0 8px;"></div>',
+                    unsafe_allow_html=True)
         ca2, cb2 = st.columns(2)
         with ca2:
             if st.button("Odśwież", key="refresh", use_container_width=True):
@@ -1061,7 +1057,6 @@ def render_chat():
     saved     = st.session_state.get("saved", False)
     p         = PROCEDURES.get(procedure, {})
 
-    # Nagłówek
     col_title, col_back = st.columns([5, 1])
     with col_title:
         st.markdown(f"""
@@ -1074,9 +1069,9 @@ def render_chat():
         """, unsafe_allow_html=True)
     with col_back:
         if st.button("← Zmień", key="back"):
-            st.session_state.chat_stage = "pick"
-            st.session_state.messages   = []
-            st.session_state.saved      = False
+            st.session_state.chat_stage  = "pick"
+            st.session_state.messages    = []
+            st.session_state.saved       = False
             st.session_state.slot_chosen = None
             st.rerun()
 
@@ -1137,14 +1132,14 @@ def render_chat():
         else:
             st.info("Brak dostępnych terminów. Możemy zapisać Twoje dane — specjalistka oddzwoni.")
 
-    # ── Oblicz can_save raz – używane i przy inpucie i przy przycisku ──
+    # ── Oblicz can_save ──
     can_save_now = (
         not saved
         and len(messages) >= 5
         and (st.session_state.get("slot_chosen") or len(messages) >= 8)
     )
 
-    # ── Input czatu ─────────────────────────────
+    # ── Input czatu ──
     if not saved and not show_slots:
         if prompt := st.chat_input("Napisz do Sofii..."):
             messages.append({"role": "user", "content": prompt})
@@ -1154,7 +1149,6 @@ def render_chat():
             loading = st.empty()
             loading.markdown('<div class="loading-bar"></div>', unsafe_allow_html=True)
 
-            # Gdy rozmowa jest już wystarczająco długa – Sofia prosi o kliknięcie przycisku
             extra_system = f"\nAktualnie omawiany zabieg: {procedure}"
             if can_save_now:
                 extra_system += (
@@ -1177,7 +1171,7 @@ def render_chat():
             st.session_state.messages = messages
             st.rerun()
 
-    # ── CTA "Zapisz i wyślij" – zawsze na dole czatu ────────────────
+    # ── Przycisk "Zapisz i wyślij" ──
     if can_save_now:
         st.markdown('<div style="height:1px;background:#e8e6e0;margin:1.5rem 0 0.8rem;"></div>',
                     unsafe_allow_html=True)
@@ -1233,10 +1227,10 @@ def render_chat():
         _, col_new, _ = st.columns([1, 2, 1])
         with col_new:
             if st.button("Nowa konsultacja", use_container_width=True, key="new_btn"):
-                st.session_state.messages        = []
-                st.session_state.saved           = False
-                st.session_state.slot_chosen     = None
-                st.session_state.chat_stage      = "pick"
+                st.session_state.messages         = []
+                st.session_state.saved            = False
+                st.session_state.slot_chosen      = None
+                st.session_state.chat_stage       = "pick"
                 st.session_state.chosen_procedure = ""
                 st.rerun()
 
@@ -1260,15 +1254,16 @@ def main():
             st.session_state[key] = default
 
     handle_url_action()
+
+    # Panel właścicielki w sidebarze – całkowicie poza głównym layoutem strony
+    render_owner_panel()
+
     render_header()
 
     if st.session_state.chat_stage == "pick":
         render_picker()
     else:
         render_chat()
-
-    # Panel właścicielki – zawsze na samym dole, oddzielony od czatu
-    render_owner_panel()
 
 
 if __name__ == "__main__":
