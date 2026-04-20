@@ -385,6 +385,13 @@ def inject_css():
         .proc-card .name { font-size: 0.95rem; }
     }
 
+    /* ── Panel właścicielki – zawsze na samym dole ── */
+    .owner-panel-wrapper {
+        margin-top: 4rem;
+        padding-top: 0.5rem;
+        border-top: 1px solid var(--border);
+    }
+
     </style>
     """, unsafe_allow_html=True)
 
@@ -443,7 +450,7 @@ def ask_groq(messages: list, system: str = None) -> str:
         resp = client.chat.completions.create(
             model="llama-3.3-70b-versatile",
             messages=[{"role": "system", "content": system or KNOWLEDGE_BASE}] + messages,
-            max_tokens=300,   # Zmniejszone – krótsze odpowiedzi
+            max_tokens=300,
             temperature=0.6,
         )
         return resp.choices[0].message.content
@@ -527,10 +534,8 @@ def _send_email(to: str, subject: str, html: str) -> bool:
 
 
 def send_consultation_emails(procedure: str, info: dict, messages: list) -> dict:
-    """Email do klientki (podsumowanie) + do właścicielki (zawsze, z lub bez linków akcji)."""
     results = {}
-    
-    # Pobierz konfigurację
+
     try:
         owner_email = st.secrets["app"].get("owner_email", "")
     except Exception:
@@ -552,7 +557,6 @@ def send_consultation_emails(procedure: str, info: dict, messages: list) -> dict
     token   = info.get("token", "")
     teraz   = datetime.now().strftime("%d.%m.%Y, %H:%M")
 
-    # ── Email do klientki – styl "oczekuje na potwierdzenie" ──
     if email and "@" in email:
         termin_line = f"<br>Proponowany termin: <strong>{termin}</strong>" if termin else ""
         html_client = f"""<!DOCTYPE html><html><head>{EMAIL_STYLE}</head><body>
@@ -574,7 +578,6 @@ def send_consultation_emails(procedure: str, info: dict, messages: list) -> dict
         </div></body></html>"""
         results["client"] = _send_email(email, f"BeautyFlow – zgłoszenie: {procedure}", html_client)
 
-    # ── Email do właścicielki – ZAWSZE wysyłany, z przyciskami akcji w mailu ──
     if owner_email:
         if token and app_url:
             confirm_url = f"{app_url}?action=confirm&token={token}"
@@ -822,11 +825,11 @@ def handle_url_action():
         st.query_params.clear()
 
 # ─────────────────────────────────────────────
-# PANEL WŁAŚCICIELKI – na dole strony, ukryty
+# PANEL WŁAŚCICIELKI – zawsze na samym dole
 # ─────────────────────────────────────────────
 def render_owner_panel():
-    st.markdown('<div style="height:1px;background:#e8e6e0;margin:2.5rem 0 0.5rem;"></div>',
-                unsafe_allow_html=True)
+    # Wrapper z dużym marginesem – odseparowany od czatu
+    st.markdown('<div class="owner-panel-wrapper"></div>', unsafe_allow_html=True)
 
     with st.expander("🔒 Panel właścicielki", expanded=False):
         if "owner_auth" not in st.session_state:
@@ -1134,6 +1137,13 @@ def render_chat():
         else:
             st.info("Brak dostępnych terminów. Możemy zapisać Twoje dane — specjalistka oddzwoni.")
 
+    # ── Oblicz can_save raz – używane i przy inpucie i przy przycisku ──
+    can_save_now = (
+        not saved
+        and len(messages) >= 5
+        and (st.session_state.get("slot_chosen") or len(messages) >= 8)
+    )
+
     # ── Input czatu ─────────────────────────────
     if not saved and not show_slots:
         if prompt := st.chat_input("Napisz do Sofii..."):
@@ -1144,10 +1154,19 @@ def render_chat():
             loading = st.empty()
             loading.markdown('<div class="loading-bar"></div>', unsafe_allow_html=True)
 
+            # Gdy rozmowa jest już wystarczająco długa – Sofia prosi o kliknięcie przycisku
+            extra_system = f"\nAktualnie omawiany zabieg: {procedure}"
+            if can_save_now:
+                extra_system += (
+                    "\nROZMOWA DOBIEGŁA KOŃCA. Zakończ rozmowę naturalnie i na końcu swojej "
+                    "odpowiedzi KONIECZNIE dodaj (jako osobny akapit) dokładnie to zdanie: "
+                    "'Gdy wszystko gotowe, kliknij przycisk „Zapisz i wyślij podsumowanie\" poniżej.'"
+                )
+
             with st.chat_message("assistant", avatar="🌿"):
                 reply = ask_groq(
                     messages=messages,
-                    system=KNOWLEDGE_BASE + f"\nAktualnie omawiany zabieg: {procedure}"
+                    system=KNOWLEDGE_BASE + extra_system
                 )
                 display = "Poniżej dostępne terminy — proszę wybrać:" \
                           if reply.strip() == "SHOW_SLOTS" else reply
@@ -1158,18 +1177,13 @@ def render_chat():
             st.session_state.messages = messages
             st.rerun()
 
-    # ── CTA "Zapisz i wyślij" – PO inpucie ─────
-    can_save = (
-        not saved
-        and len(messages) >= 5
-        and (st.session_state.get("slot_chosen") or len(messages) >= 8)
-    )
-    if can_save:
-        st.markdown('<div style="height:1px;background:#e8e6e0;margin:1rem 0 0.5rem;"></div>',
+    # ── CTA "Zapisz i wyślij" – zawsze na dole czatu ────────────────
+    if can_save_now:
+        st.markdown('<div style="height:1px;background:#e8e6e0;margin:1.5rem 0 0.8rem;"></div>',
                     unsafe_allow_html=True)
         _, col_btn, _ = st.columns([1, 2, 1])
         with col_btn:
-            if st.button("Zapisz i wyślij podsumowanie", use_container_width=True, key="save_btn"):
+            if st.button("💾 Zapisz i wyślij podsumowanie", use_container_width=True, key="save_btn"):
                 loading = st.empty()
                 loading.markdown('<div class="loading-bar"></div>', unsafe_allow_html=True)
 
@@ -1225,7 +1239,6 @@ def render_chat():
                 st.session_state.chat_stage      = "pick"
                 st.session_state.chosen_procedure = ""
                 st.rerun()
-        # NIE ma return tutaj – żeby render_owner_panel() w main() zawsze się wykonał
 
 # ─────────────────────────────────────────────
 # MAIN
@@ -1254,6 +1267,7 @@ def main():
     else:
         render_chat()
 
+    # Panel właścicielki – zawsze na samym dole, oddzielony od czatu
     render_owner_panel()
 
 
