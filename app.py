@@ -958,7 +958,7 @@ def render_chat():
     st.markdown('<div style="height:1px;background:#e6e4dc;margin-bottom:1rem;"></div>', unsafe_allow_html=True)
 
     for msg in messages:
-        avatar = "✦" if msg["role"] == "assistant" else "👤"
+        avatar = "🌿" if msg["role"] == "assistant" else "👤"
         with st.chat_message(msg["role"], avatar=avatar):
             st.markdown(msg["content"])
 
