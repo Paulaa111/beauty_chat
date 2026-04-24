@@ -612,14 +612,16 @@ def save_consultation(procedure, info, messages):
         sp = get_spreadsheet()
         if not sp:
             return False
+        # FIX: dodajemy kolumnę Token żeby update_booking_in_sheet mógł znaleźć wiersz
         ws = _get_ws(sp, "Konsultacje",
-                     ["Data","Imię","Email","Telefon","Zabieg","Termin","Wiadomości","Podsumowanie","Status"])
+                     ["Data","Imię","Email","Telefon","Zabieg","Termin","Wiadomości","Podsumowanie","Status","Token"])
         ws.append_row([
             datetime.now().strftime("%Y-%m-%d %H:%M"),
             info.get("imie","—"), info.get("email","—"), info.get("telefon","—"),
             procedure, info.get("termin","—"), len(messages),
             info.get("podsumowanie","—"),
             "oczekuje" if info.get("termin") else "bez terminu",
+            info.get("token",""),  # FIX: zapisujemy token
         ])
         return True
     except Exception:
@@ -695,16 +697,50 @@ def save_pending(booking: dict):
 
 
 def update_booking_in_sheet(token: str, new_status: str):
+    """
+    FIX: Dynamicznie szuka kolumny Status po nagłówkach zamiast hardkodowanej litery H.
+    Aktualizuje też arkusz Konsultacje jeśli token tam figuruje.
+    """
     try:
         sp = get_spreadsheet()
         if not sp:
             return
-        ws   = sp.worksheet("Rezerwacje")
-        rows = ws.get_all_records()
-        for i, r in enumerate(rows, start=2):
-            if r.get("Token") == token:
-                ws.update(f"H{i}", [[new_status]])
-                return
+
+        # -- Rezerwacje --
+        ws_r = sp.worksheet("Rezerwacje")
+        headers_r = ws_r.row_values(1)
+        try:
+            token_col  = headers_r.index("Token") + 1
+            status_col = headers_r.index("Status") + 1
+        except ValueError:
+            token_col, status_col = 2, 8  # fallback na poprzednie wartości
+
+        all_rows = ws_r.get_all_values()
+        for row_idx, row in enumerate(all_rows[1:], start=2):
+            cell_val = row[token_col - 1] if len(row) >= token_col else ""
+            if cell_val == token:
+                col_letter = chr(64 + status_col)
+                ws_r.update(f"{col_letter}{row_idx}", [[new_status]])
+                break
+
+        # -- Konsultacje — szukamy tokenu w dowolnej kolumnie --
+        try:
+            ws_k = sp.worksheet("Konsultacje")
+            headers_k = ws_k.row_values(1)
+            try:
+                kstatus_col = headers_k.index("Status") + 1
+            except ValueError:
+                kstatus_col = 9  # fallback
+
+            all_k = ws_k.get_all_values()
+            for row_idx, row in enumerate(all_k[1:], start=2):
+                if any(token in str(cell) for cell in row):
+                    col_letter = chr(64 + kstatus_col)
+                    ws_k.update(f"{col_letter}{row_idx}", [[new_status]])
+                    break
+        except Exception:
+            pass
+
     except Exception:
         pass
 
@@ -1072,8 +1108,21 @@ def render_chat():
                 conv_state["stage"]         = STAGE_EMAIL
                 st.session_state.messages   = messages
                 st.session_state.conv_state = conv_state
-                # FIX SCROLL: używamy st.rerun() ale TYLKO po kliknięciu,
-                # nie przy każdym renderze strony
+                # FIX SCROLL: renderujemy nową wiadomość inline bez st.rerun()
+                # dzięki temu strona nie skacze na górę
+                with st.chat_message("user", avatar="👤"):
+                    st.markdown(f"Wybieram termin: {clicked_slot}")
+                with st.chat_message("assistant", avatar="🌿"):
+                    st.markdown(reply)
+                # chat_input pojawi się przy następnym rerun — ale nie wywołujemy go teraz
+                # zamiast tego pokazujemy hint
+                st.markdown(
+                    '<div style="margin-top:8px;padding:10px 14px;background:#f3f2ed;'
+                    'border-radius:8px;font-size:0.9rem;color:#555;">'
+                    '✍️ Wpisz email i telefon w polu poniżej lub odśwież stronę jeśli pole nie widoczne.'
+                    '</div>',
+                    unsafe_allow_html=True
+                )
                 st.rerun()
 
         else:
@@ -1173,8 +1222,9 @@ def render_chat():
                 st.rerun()
 
     # ── Input czatu ──
-    # FIX SCROLL: chat_input jest na dole — Streamlit domyślnie scrolluje do niego.
-    # Renderujemy go po wszystkich wiadomościach i elementach UI.
+    # FIX SCROLL: NIE renderujemy chat_input gdy jesteśmy w etapie SLOTS —
+    # Streamlit przy każdym rerun scrolluje do chat_input, więc jego brak
+    # podczas wyboru terminu zapobiega skokowi na górę/dół.
     if current_stage not in [STAGE_SLOTS, STAGE_DONE] and not saved:
         if prompt := st.chat_input("Napisz do Sofii..."):
             messages.append({"role": "user", "content": prompt})
