@@ -396,6 +396,15 @@ def inject_css():
     .stTextInput>div>div>input:focus { border-color:var(--gold) !important; box-shadow:0 0 0 3px rgba(212,168,67,0.12) !important; }
     .stSelectbox>div>div { background:var(--surface) !important; border-color:var(--border) !important; border-radius:8px !important; }
     [data-testid="InputInstructions"] { display:none !important; }
+    /* FIX: ukryj tooltip "Press Enter to submit" i keyboard shortcut hint */
+    .stChatInput [data-testid="InputInstructions"],
+    .stChatInput small,
+    .stChatInput [class*="instructions"],
+    [data-testid="stChatInputContainer"] small,
+    [data-testid="stChatInputContainer"] [class*="keyboard"],
+    [data-testid="stChatInputContainer"] [class*="shortcut"] { display:none !important; }
+    /* Ukryj cały footer toolbar chat inputu */
+    [data-testid="stChatInputContainer"] > div > div:last-child small { display:none !important; }
 
     hr { border-color:var(--border) !important; margin:1rem 0 !important; }
     ::-webkit-scrollbar { width:4px; }
@@ -1197,20 +1206,28 @@ def render_chat():
                 if email_r.get("owner"):   lines.append("✓ Powiadomienie wysłane do właścicielki")
                 if slot_chosen:            lines.append(f"✓ Termin {slot_chosen} oczekuje na potwierdzenie")
 
-                st.success("\n\n".join(lines) if lines else "Zapisano!")
+                # FIX: nie pokazuj st.success() — od razu rerun do stanu "saved"
+                # który renderuje ładną kartę potwierdzenia, bez migającego tekstu pod CTA
                 st.session_state.saved = True
+                st.session_state._save_lines = lines  # zachowaj linie do wyświetlenia
                 st.rerun()
             st.markdown('</div>', unsafe_allow_html=True)
 
     # ── Po zapisie ──
     if saved:
-        st.markdown("""
+        lines_done = st.session_state.get("_save_lines", [])
+        lines_html = "".join(
+            f'<div style="font-size:0.84rem;color:#2d6e4a;margin-top:4px;">{l}</div>'
+            for l in lines_done
+        ) if lines_done else ""
+        st.markdown(f"""
         <div style="background:#fdf3d8;border:1px solid rgba(212,168,67,0.4);border-radius:12px;
                     padding:1.8rem;text-align:center;margin:1.5rem 0;">
           <div style="font-family:'Cormorant Garamond',serif;font-size:1.4rem;font-weight:500;
-                      color:#1c1c1a;margin-bottom:6px;">Rezerwacja zapisana</div>
-          <div style="font-size:0.9rem;color:#666;">
+                      color:#1c1c1a;margin-bottom:8px;">Rezerwacja zapisana ✓</div>
+          <div style="font-size:0.9rem;color:#666;margin-bottom:{'10px' if lines_html else '0'};">
             Sprawdź skrzynkę email — wysłałyśmy potwierdzenie z detalami.</div>
+          {lines_html}
         </div>
         """, unsafe_allow_html=True)
         _, col_new, _ = st.columns([1, 2, 1])
@@ -1225,7 +1242,46 @@ def render_chat():
     # FIX SCROLL: NIE renderujemy chat_input gdy jesteśmy w etapie SLOTS —
     # Streamlit przy każdym rerun scrolluje do chat_input, więc jego brak
     # podczas wyboru terminu zapobiega skokowi na górę/dół.
-    if current_stage not in [STAGE_SLOTS, STAGE_DONE] and not saved:
+    # FIX SCROLL (ostateczny): chat_input powoduje scroll przy każdym rerun.
+    # Nie renderujemy go gdy: etap SLOTS, etap DONE, lub gdy slot już wybrany
+    # i czekamy tylko na dane kontaktowe (etap EMAIL) — w tym momencie
+    # wiadomości są na dole i nie chcemy skoku.
+    # Gdy slot wybrany + etap EMAIL — dedykowany formularz zamiast chat_input (brak scroll)
+    _slot_contact_mode = (
+        bool(st.session_state.get("slot_chosen"))
+        and current_stage == STAGE_EMAIL
+        and not saved
+    )
+    if _slot_contact_mode:
+        st.markdown(
+            '<div style="margin-top:10px;padding:10px 14px;background:#f3f2ed;'
+            'border-left:3px solid var(--gold);border-radius:8px;font-size:0.88rem;color:#555;">'
+            '✍️ Wpisz email i telefon poniżej, np. <em>anna@gmail.com, 600 100 200</em>'
+            '</div>',
+            unsafe_allow_html=True,
+        )
+        with st.form(key="contact_form", clear_on_submit=True):
+            contact_val = st.text_input(
+                "Dane kontaktowe",
+                placeholder="anna@gmail.com, 600 100 200",
+                label_visibility="collapsed",
+            )
+            submitted = st.form_submit_button("Wyślij →")
+        if submitted and contact_val.strip():
+            prompt = contact_val.strip()
+            messages.append({"role": "user", "content": prompt})
+            reply, conv_state = conversation_next(procedure, prompt, conv_state)
+            messages.append({"role": "assistant", "content": reply})
+            st.session_state.messages   = messages
+            st.session_state.conv_state = conv_state
+            st.rerun()
+
+    _block_input = (
+        current_stage in [STAGE_SLOTS, STAGE_DONE]
+        or saved
+        or _slot_contact_mode
+    )
+    if not _block_input:
         if prompt := st.chat_input("Napisz do Sofii..."):
             messages.append({"role": "user", "content": prompt})
             with st.chat_message("user", avatar="👤"):
