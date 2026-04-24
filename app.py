@@ -53,7 +53,7 @@ PROCEDURES = {
              "contraindication_keywords": ["tak", "jestem w ciąży", "ciąża", "karmię"]},
         ],
         "ok_message": "Wszystko brzmi dobrze — laminacja będzie świetnym wyborem. Chciałaby Pani wybrać termin?",
-        "contraindication_message": "Dziękuję za szczerość — przy tym przeciwwskazaniu nie możemy wykonać zabiegu. Zapraszamy po zakończeniu ciąży lub po ustąpieniu dolegliwości. Tel: +48 500 123 456.",
+        "contraindication_message": "Dziękuję za szczerość — przy tym przeciwwskazaniu nie możemy wykonać zabiegu. Tel: +48 500 123 456.",
     },
     "Laminacja Rzęs": {
         "tagline": "Naturalne podkręcenie na 6–8 tygodni",
@@ -71,7 +71,7 @@ PROCEDURES = {
              "contraindication_keywords": ["krótkie", "bardzo krótkie", "4mm", "poniżej"]},
         ],
         "ok_message": "Rzęsy nadają się do laminacji. Chciałaby Pani wybrać termin?",
-        "contraindication_message": "Niestety przy takich rzęsach lub reakcji alergicznej zabieg nie byłby bezpieczny. Zapraszamy na konsultację: +48 500 123 456.",
+        "contraindication_message": "Niestety przy takich rzęsach lub reakcji alergicznej zabieg nie byłby bezpieczny. Tel: +48 500 123 456.",
     },
     "Henna + Regulacja Brwi": {
         "tagline": "Koloryzacja i nadanie kształtu brwiom",
@@ -89,7 +89,7 @@ PROCEDURES = {
              "contraindication_keywords": ["tak", "jestem w ciąży", "ciąża"]},
         ],
         "ok_message": "Henna z regulacją to świetny wybór. Chciałaby Pani wybrać termin?",
-        "contraindication_message": "Przy alergii na hennę lub ciąży nie możemy bezpiecznie wykonać zabiegu. Kontakt: +48 500 123 456.",
+        "contraindication_message": "Przy alergii na hennę lub ciąży nie możemy bezpiecznie wykonać zabiegu. Tel: +48 500 123 456.",
     },
     "Przedłużanie Rzęs (1:1)": {
         "tagline": "Klasyczne przedłużanie metodą włosek po włosku",
@@ -106,7 +106,7 @@ PROCEDURES = {
             {"q": "Czy nosi Pani na co dzień soczewki kontaktowe?", "key": "soczewki"},
         ],
         "ok_message": "Dobierzemy idealny efekt. Chciałaby Pani wybrać termin?",
-        "contraindication_message": "Przy alergii na klej cyjanoakrylowy zabieg niestety nie jest możliwy. Konsultacja: +48 500 123 456.",
+        "contraindication_message": "Przy alergii na klej cyjanoakrylowy zabieg niestety nie jest możliwy. Tel: +48 500 123 456.",
     },
 }
 
@@ -125,6 +125,9 @@ STAGE_SLOTS     = "slots"
 STAGE_EMAIL     = "email"
 STAGE_DONE      = "done"
 
+# ─────────────────────────────────────────────
+# LOGIKA ROZMOWY – deterministyczna, bez AI
+# ─────────────────────────────────────────────
 def conversation_next(procedure, user_msg, state):
     p      = PROCEDURES[procedure]
     script = p["script"]
@@ -150,15 +153,14 @@ def conversation_next(procedure, user_msg, state):
             return f"Witamy serdecznie! Zadam kilka krótkich pytań, żeby dobrze się przygotować.\n\n{first_q}", state
 
     if stage == STAGE_QUESTIONS:
-        q_index = state.get("q_index", 0)
-        answers = state.get("answers", {})
-        current_q = script[q_index]
+        q_index     = state.get("q_index", 0)
+        answers     = state.get("answers", {})
+        current_q   = script[q_index]
         answers[current_q["key"]] = user_msg
         state["answers"] = answers
         contra_kw = current_q.get("contraindication_keywords", [])
         if contra_kw and any(kw in user_msg.lower() for kw in contra_kw):
             state["stage"] = STAGE_CONTRA
-            state["contraindication"] = True
             return p["contraindication_message"], state
         next_index = q_index + 1
         if next_index < len(script):
@@ -181,7 +183,7 @@ def conversation_next(procedure, user_msg, state):
         if "@" in user_msg:
             state["email"] = user_msg.strip()
             state["stage"] = STAGE_DONE
-            return "Dziękuję! Wyślę podsumowanie na podany adres. Gdy wszystko gotowe — kliknij przycisk **Zapisz i wyślij podsumowanie** poniżej.", state
+            return "Dziękuję! Kliknij przycisk **Zapisz i wyślij podsumowanie** poniżej.", state
         else:
             return "Nie rozpoznałam adresu email — czy może Pani wpisać go jeszcze raz?", state
 
@@ -190,30 +192,24 @@ def conversation_next(procedure, user_msg, state):
 
     return "Przepraszam, coś poszło nie tak. Proszę zadzwonić: +48 500 123 456.", state
 
+
 def get_greeting_message(procedure):
-    p = PROCEDURES[procedure]
     return (
         f"Cześć! Jestem Sofia, konsultantka BeautyFlow. "
         f"Zanim umówimy termin na **{procedure}**, zadam kilka krótkich pytań. "
         f"Jak mam się do Pani zwracać?"
     )
 
-@st.cache_resource
-def get_groq_client():
-    try:
-        return OpenAI(api_key=st.secrets["app"]["groq_api_key"], base_url="https://api.groq.com/openai/v1")
-    except Exception as e:
-        st.error(f"Brak klucza Groq API: {e}")
-        return None
 
 def extract_client_info(procedure, conv_state, messages):
     answers = conv_state.get("answers", {})
-    result = {
-        "imie":        conv_state.get("name", "—"),
-        "email":       conv_state.get("email", ""),
-        "telefon":     "—",
+    result  = {
+        "imie":         conv_state.get("name", "—"),
+        "email":        conv_state.get("email", ""),
+        "telefon":      "—",
         "podsumowanie": f"Zabieg: {procedure}. " + " | ".join(f"{k}: {v}" for k, v in answers.items()),
     }
+    # Fallback – szukaj emaila w wiadomościach
     if not result["email"]:
         for m in messages:
             if "@" in m.get("content", ""):
@@ -223,28 +219,30 @@ def extract_client_info(procedure, conv_state, messages):
                         break
     return result
 
-# ─── CSS ───────────────────────────────────────────────────
+# ─────────────────────────────────────────────
+# CSS
+# ─────────────────────────────────────────────
 def inject_css():
     st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&display=swap');
 
     :root {
-        --bg:       #faf9f6;
-        --surface:  #ffffff;
-        --surface2: #f3f2ed;
-        --border:   #e6e4dc;
-        --border2:  #ccc9be;
-        --accent:   #1c1c1a;
-        --accent2:  #0e0e0c;
-        --gold:     #d4a843;
-        --gold-lt:  #fdf3d8;
-        --gold-dk:  #b8902e;
-        --text:     #1c1c1a;
-        --text2:    #6a6860;
-        --text3:    #aaa89e;
-        --green:    #2d6e4a;
-        --red:      #b83232;
+        --bg:      #faf9f6;
+        --surface: #ffffff;
+        --surface2:#f3f2ed;
+        --border:  #e6e4dc;
+        --border2: #ccc9be;
+        --accent:  #1c1c1a;
+        --accent2: #0e0e0c;
+        --gold:    #d4a843;
+        --gold-lt: #fdf3d8;
+        --gold-dk: #b8902e;
+        --text:    #1c1c1a;
+        --text2:   #6a6860;
+        --text3:   #aaa89e;
+        --green:   #2d6e4a;
+        --red:     #b83232;
     }
 
     html, body, [data-testid="stAppViewContainer"] {
@@ -252,55 +250,31 @@ def inject_css():
         color: var(--text) !important;
         font-family: 'DM Sans', sans-serif !important;
     }
-
-    /* Ogranicz szerokość i wyśrodkuj */
     [data-testid="stAppViewBlockContainer"] {
-        max-width: 900px !important;
+        max-width: 860px !important;
         padding: 0 2rem !important;
         margin: 0 auto !important;
     }
-    @media (max-width: 700px) {
-        [data-testid="stAppViewBlockContainer"] { padding: 0 1rem !important; }
-    }
-
-    /* Ukryj sidebar toggle i sidebar całkowicie dla klientek */
     [data-testid="stSidebar"] {
         background: var(--surface) !important;
         border-right: 1px solid var(--border) !important;
     }
     [data-testid="stSidebar"] * { color: var(--text) !important; font-family: 'DM Sans', sans-serif !important; }
 
-    /* Ukryj "Press Enter to apply" i keyboard hint */
-    [data-testid="InputInstructions"],
-    .st-emotion-cache-1gulkj5,
-    small[data-testid="stWidgetLabel"] small { display: none !important; }
-    .stTextInput [data-baseweb="input"] ~ div[style*="font-size"] { display: none !important; }
+    h1,h2,h3 { font-family:'Cormorant Garamond',serif !important; color:var(--text) !important; font-weight:500 !important; }
 
-    h1, h2, h3 {
-        font-family: 'Cormorant Garamond', serif !important;
-        color: var(--text) !important;
-        font-weight: 500 !important;
-    }
-
-    /* ── LOGO MARK ── */
+    /* Logo */
     .bf-logo { display:flex; align-items:center; gap:12px; padding:0.4rem 0 1rem; }
     .bf-logo-mark {
-        width:42px; height:42px;
-        background: var(--gold);
-        border-radius: 10px;
+        width:42px; height:42px; background:var(--gold); border-radius:10px;
         display:flex; align-items:center; justify-content:center;
-        font-family: 'Cormorant Garamond', serif;
-        font-weight: 600;
-        font-size: 1.1rem;
-        color: #fff;
-        letter-spacing: 0.01em;
-        flex-shrink: 0;
-        box-shadow: 0 2px 12px rgba(212,168,67,0.4);
+        font-family:'Cormorant Garamond',serif; font-weight:600; font-size:1.1rem;
+        color:#fff; box-shadow:0 2px 12px rgba(212,168,67,0.4); flex-shrink:0;
     }
     .bf-logo-text { font-family:'Cormorant Garamond',serif; font-size:1.3rem; font-weight:500; color:#1c1c1a; letter-spacing:0.03em; line-height:1.1; }
     .bf-logo-sub  { font-size:0.6rem; letter-spacing:0.18em; color:var(--text3); text-transform:uppercase; margin-top:2px; }
 
-    /* ── CHAT ── */
+    /* Chat – POPRAWKA SCROLL: padding-bottom żeby input nie zasłaniał odpowiedzi */
     [data-testid="stChatMessage"] {
         background: var(--surface) !important;
         border: 1px solid var(--border) !important;
@@ -309,90 +283,58 @@ def inject_css():
         box-shadow: 0 1px 4px rgba(0,0,0,0.04) !important;
         animation: msgIn 0.22s ease forwards;
     }
-    @keyframes msgIn {
-        from { opacity:0; transform:translateY(8px); }
-        to   { opacity:1; transform:translateY(0); }
-    }
+    @keyframes msgIn { from{opacity:0;transform:translateY(8px);} to{opacity:1;transform:translateY(0);} }
     [data-testid="stChatMessage"] p,
     [data-testid="stChatMessage"] span,
-    [data-testid="stChatMessage"] div { color: var(--text) !important; font-size: 1.02rem !important; line-height: 1.75 !important; }
-    [data-testid="stChatMessage"] strong { color: var(--accent2) !important; font-weight: 600 !important; }
+    [data-testid="stChatMessage"] div { color:var(--text) !important; font-size:1.02rem !important; line-height:1.75 !important; }
+    [data-testid="stChatMessage"] strong { color:var(--accent2) !important; font-weight:600 !important; }
+
+    /* Anchor niewidoczny na dole czatu – trick na scroll */
+    #chat-bottom { height:1px; }
 
     [data-testid="stChatInputTextArea"] {
-        background: var(--surface) !important;
-        color: var(--text) !important;
-        border: 1px solid var(--border2) !important;
-        border-radius: 10px !important;
-        font-family: 'DM Sans', sans-serif !important;
-        font-size: 1rem !important;
+        background: var(--surface) !important; color: var(--text) !important;
+        border: 1px solid var(--border2) !important; border-radius: 10px !important;
+        font-family: 'DM Sans', sans-serif !important; font-size: 1rem !important;
     }
-    [data-testid="stChatInputTextArea"]:focus {
-        border-color: var(--gold) !important;
-        box-shadow: 0 0 0 3px rgba(212,168,67,0.15) !important;
-    }
+    [data-testid="stChatInputTextArea"]:focus { border-color:var(--gold) !important; box-shadow:0 0 0 3px rgba(212,168,67,0.15) !important; }
 
-    /* ── BUTTONS – wszystkie ── */
+    /* Buttons */
     .stButton > button {
-        background: var(--accent) !important;
-        color: #ffffff !important;
-        border: none !important;
-        border-radius: 8px !important;
-        font-family: 'DM Sans', sans-serif !important;
-        font-weight: 500 !important;
-        font-size: 0.9rem !important;
-        padding: 0.55rem 1.2rem !important;
-        transition: background 0.15s, transform 0.1s, box-shadow 0.15s !important;
+        background: var(--accent) !important; color:#fff !important; border:none !important;
+        border-radius:8px !important; font-family:'DM Sans',sans-serif !important;
+        font-weight:500 !important; font-size:0.9rem !important; padding:0.55rem 1.2rem !important;
+        transition:background 0.15s,transform 0.1s,box-shadow 0.15s !important;
     }
-    .stButton > button:hover {
-        background: #333 !important;
-        transform: translateY(-1px) !important;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.18) !important;
-    }
-    .stButton > button p, .stButton > button span, .stButton > button div { color:#ffffff !important; }
+    .stButton > button:hover { background:#333 !important; transform:translateY(-1px) !important; box-shadow:0 4px 12px rgba(0,0,0,0.18) !important; }
+    .stButton > button p, .stButton > button span, .stButton > button div { color:#fff !important; }
 
-    /* ── CTA – złoty przycisk ── */
+    /* CTA złoty przycisk */
     .cta-save-wrap .stButton > button {
-        background: var(--gold) !important;
-        color: #fff !important;
-        font-size: 1rem !important;
-        font-weight: 600 !important;
-        padding: 0.75rem 2rem !important;
-        border-radius: 10px !important;
-        box-shadow: 0 4px 16px rgba(212,168,67,0.4) !important;
-        letter-spacing: 0.01em !important;
+        background:var(--gold) !important; color:#fff !important;
+        font-size:1rem !important; font-weight:600 !important;
+        padding:0.75rem 2rem !important; border-radius:10px !important;
+        box-shadow:0 4px 16px rgba(212,168,67,0.4) !important;
     }
-    .cta-save-wrap .stButton > button:hover {
-        background: var(--gold-dk) !important;
-        color: #fff !important;
-        box-shadow: 0 8px 24px rgba(212,168,67,0.5) !important;
-    }
+    .cta-save-wrap .stButton > button:hover { background:var(--gold-dk) !important; box-shadow:0 8px 24px rgba(212,168,67,0.5) !important; }
     .cta-save-wrap .stButton > button p,
     .cta-save-wrap .stButton > button span,
-    .cta-save-wrap .stButton > button div { color: #fff !important; }
+    .cta-save-wrap .stButton > button div { color:#fff !important; }
 
-    /* ── SLOT BUTTONS ── */
+    /* Slot buttons – jasne z obramowaniem gold */
     .slot-btn .stButton > button {
-        background: var(--surface) !important;
-        color: var(--text) !important;
-        border: 1.5px solid var(--gold) !important;
-        font-size: 0.9rem !important;
+        background:var(--surface) !important; color:var(--text) !important;
+        border:1.5px solid var(--gold) !important; font-size:0.88rem !important;
     }
-    .slot-btn .stButton > button:hover {
-        background: var(--gold-lt) !important;
-        color: var(--accent) !important;
-        border-color: var(--gold-dk) !important;
-    }
+    .slot-btn .stButton > button:hover { background:var(--gold-lt) !important; border-color:var(--gold-dk) !important; }
     .slot-btn .stButton > button p,
-    .slot-btn .stButton > button span { color: var(--text) !important; }
+    .slot-btn .stButton > button span { color:var(--text) !important; }
 
-    /* ── PROC CARDS ── */
+    /* Proc cards */
     .proc-card {
-        background: var(--surface);
-        border: 1px solid var(--border);
-        border-radius: 14px;
-        padding: 1.4rem 1.6rem;
-        margin-bottom: 12px;
-        transition: box-shadow 0.2s, border-color 0.2s, transform 0.15s;
+        background:var(--surface); border:1px solid var(--border); border-radius:14px;
+        padding:1.4rem 1.6rem; margin-bottom:12px;
+        transition:box-shadow 0.2s,border-color 0.2s,transform 0.15s;
     }
     .proc-card:hover { box-shadow:0 6px 20px rgba(0,0,0,0.07); border-color:var(--gold); transform:translateY(-2px); }
     .proc-card .name { font-family:'Cormorant Garamond',serif; font-size:1.25rem; font-weight:500; color:var(--text); margin-bottom:5px; }
@@ -400,77 +342,69 @@ def inject_css():
     .proc-card .meta { font-size:0.84rem; color:var(--text2); margin-top:11px; display:flex; gap:10px; }
     .proc-card .meta span { background:var(--surface2); border-radius:5px; padding:3px 10px; border:1px solid var(--border); }
 
-    /* ── TICKER ── */
-    .ticker-wrap { overflow:hidden; white-space:nowrap; border-radius:8px;
-                   background:var(--gold-lt); border:1px solid rgba(212,168,67,0.4); padding:8px 0; margin-bottom:1.4rem; }
+    /* Ticker */
+    .ticker-wrap { overflow:hidden; white-space:nowrap; border-radius:8px; background:var(--gold-lt); border:1px solid rgba(212,168,67,0.4); padding:8px 0; margin-bottom:1.4rem; }
     .ticker-inner { display:inline-block; animation:ticker 24s linear infinite; font-size:0.82rem; color:var(--text2); }
     @keyframes ticker { 0%{transform:translateX(100vw);} 100%{transform:translateX(-100%);} }
     .ticker-dot { color:var(--gold-dk); margin:0 14px; }
 
-    /* ── TEXT INPUTS ── */
-    .stTextInput > div > div > input {
-        background:var(--surface) !important; color:var(--text) !important;
-        border:1px solid var(--border) !important; border-radius:8px !important;
-        font-family:'DM Sans',sans-serif !important; font-size:0.9rem !important;
-    }
-    .stTextInput > div > div > input:focus { border-color:var(--gold) !important; box-shadow:0 0 0 3px rgba(212,168,67,0.12) !important; }
-    .stSelectbox > div > div { background:var(--surface) !important; border-color:var(--border) !important; border-radius:8px !important; }
-
-    /* Ukryj "Press ↵ Enter to apply" w date/select inputach */
+    /* Inputs */
+    .stTextInput>div>div>input { background:var(--surface) !important; color:var(--text) !important; border:1px solid var(--border) !important; border-radius:8px !important; font-family:'DM Sans',sans-serif !important; font-size:0.9rem !important; }
+    .stTextInput>div>div>input:focus { border-color:var(--gold) !important; box-shadow:0 0 0 3px rgba(212,168,67,0.12) !important; }
+    .stSelectbox>div>div { background:var(--surface) !important; border-color:var(--border) !important; border-radius:8px !important; }
     [data-testid="InputInstructions"] { display:none !important; }
-    .st-emotion-cache-1gulkj5 { display:none !important; }
 
     hr { border-color:var(--border) !important; margin:1rem 0 !important; }
     ::-webkit-scrollbar { width:4px; }
     ::-webkit-scrollbar-thumb { background:var(--border2); border-radius:4px; }
     #MainMenu, footer { visibility:hidden; }
     [data-testid="stDecoration"] { display:none; }
-
-    /* Sidebar labels */
     [data-testid="stSidebar"] .stTextInput label,
-    [data-testid="stSidebar"] .stSelectbox label,
-    [data-testid="stSidebar"] .stDateInput label { font-size:0.75rem !important; color:var(--text3) !important; }
+    [data-testid="stSidebar"] .stSelectbox label { font-size:0.75rem !important; color:var(--text3) !important; }
     </style>
     """, unsafe_allow_html=True)
 
 
-def render_logo(size="normal"):
-    small = size == "small"
-    mark_size = "30px" if small else "42px"
-    font_main = "0.9rem" if small else "1.3rem"
-    font_sub  = "0.52rem" if small else "0.6rem"
-    st.markdown(f"""
+def render_logo():
+    st.markdown("""
     <div class="bf-logo">
-      <div class="bf-logo-mark" style="width:{mark_size};height:{mark_size};font-size:{'0.85rem' if small else '1.1rem'};">✦</div>
+      <div class="bf-logo-mark">✦</div>
       <div>
-        <div class="bf-logo-text" style="font-size:{font_main};">BeautyFlow</div>
-        <div class="bf-logo-sub" style="font-size:{font_sub};">Studio Urody · AI Konsultant</div>
+        <div class="bf-logo-text">BeautyFlow</div>
+        <div class="bf-logo-sub">Studio Urody · AI Konsultant</div>
       </div>
     </div>
     """, unsafe_allow_html=True)
 
-# ─── EMAIL ────────────────────────────────────────────────
-EMAIL_STYLE = """
-<style>
-  body { font-family:'Georgia',serif; background:#faf9f6; margin:0; padding:0; }
-  .wrap { max-width:540px; margin:32px auto; background:#fff; border-radius:12px; overflow:hidden; border:1px solid #e6e4dc; }
-  .hdr  { background:#1c1c1a; padding:28px 36px; }
-  .hdr h1 { color:#d4a843; font-size:1.5rem; margin:0; letter-spacing:0.06em; font-weight:400; font-family:'Georgia',serif; }
-  .hdr p  { color:#666; font-size:0.7rem; letter-spacing:0.2em; text-transform:uppercase; margin:6px 0 0; }
-  .body { padding:28px 36px; color:#1c1c1a; line-height:1.75; font-size:0.92rem; }
-  .box  { background:#faf9f6; border-left:3px solid #d4a843; border-radius:6px; padding:12px 16px; margin:14px 0; font-size:0.88rem; }
-  .btn  { display:inline-block; padding:12px 28px; border-radius:8px; font-family:sans-serif; font-size:0.88rem; font-weight:600; letter-spacing:0.03em; text-decoration:none; margin:6px 6px 0 0; }
-  .btn-ok { background:#2d6e4a; color:#fff !important; }
-  .btn-no { background:#b83232; color:#fff !important; }
-  .btn-app { background:#d4a843; color:#fff !important; }
-  .ftr  { background:#faf9f6; padding:16px 36px; text-align:center; color:#aaa; font-size:0.75rem; border-top:1px solid #e6e4dc; }
-</style>
-"""
+# ─────────────────────────────────────────────
+# EMAIL
+# ─────────────────────────────────────────────
+EMAIL_STYLE = """<style>
+  body{font-family:'Georgia',serif;background:#faf9f6;margin:0;padding:0;}
+  .wrap{max-width:540px;margin:32px auto;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #e6e4dc;}
+  .hdr{background:#1c1c1a;padding:28px 36px;}
+  .hdr h1{color:#d4a843;font-size:1.5rem;margin:0;letter-spacing:0.06em;font-weight:400;font-family:'Georgia',serif;}
+  .hdr p{color:#666;font-size:0.7rem;letter-spacing:0.2em;text-transform:uppercase;margin:6px 0 0;}
+  .body{padding:28px 36px;color:#1c1c1a;line-height:1.75;font-size:0.92rem;}
+  .box{background:#faf9f6;border-left:3px solid #d4a843;border-radius:6px;padding:12px 16px;margin:14px 0;font-size:0.88rem;}
+  .btn{display:inline-block;padding:12px 28px;border-radius:8px;font-family:sans-serif;font-size:0.88rem;font-weight:600;letter-spacing:0.03em;text-decoration:none;margin:6px 6px 0 0;}
+  .btn-ok{background:#2d6e4a;color:#fff !important;}
+  .btn-no{background:#b83232;color:#fff !important;}
+  .btn-app{background:#d4a843;color:#fff !important;}
+  .ftr{background:#faf9f6;padding:16px 36px;text-align:center;color:#aaa;font-size:0.75rem;border-top:1px solid #e6e4dc;}
+</style>"""
 
-def _send_email(to, subject, html):
+
+def _send_email(to: str, subject: str, html: str) -> bool:
+    """Wysyła email przez Gmail SMTP. Zwraca True jeśli sukces."""
     try:
+        # FIX: bezpieczne pobieranie credentials
         gmail_user = st.secrets["email"]["gmail_user"]
         gmail_pass = st.secrets["email"]["gmail_password"]
+    except (KeyError, Exception) as e:
+        st.warning(f"Brak konfiguracji email w Secrets [email]: {e}")
+        return False
+    try:
         msg = MIMEMultipart("alternative")
         msg["Subject"] = subject
         msg["From"]    = f"BeautyFlow Studio <{gmail_user}>"
@@ -481,22 +415,29 @@ def _send_email(to, subject, html):
             s.sendmail(gmail_user, to, msg.as_string())
         return True
     except Exception as e:
-        st.warning(f"Email error: {e}")
+        st.warning(f"Błąd wysyłki email: {e}")
         return False
 
-def send_consultation_emails(procedure, info):
+
+def send_consultation_emails(procedure: str, info: dict) -> dict:
+    """Wysyła email do klientki i do właścicielki."""
     results = {}
+
+    # FIX: bezpieczne pobieranie konfiguracji
     try:
-        owner_email = st.secrets["app"].get("owner_email", "")
-    except Exception:
+        owner_email = st.secrets["app"]["owner_email"]
+    except (KeyError, Exception):
         owner_email = ""
     try:
-        app_url = st.secrets["app"].get("app_url", "")
-    except Exception:
+        app_url = st.secrets["app"]["app_url"]
+    except (KeyError, Exception):
         app_url = ""
+
+    # Sprawdź czy email jest w ogóle skonfigurowany
     try:
         st.secrets["email"]["gmail_user"]
-    except Exception:
+    except (KeyError, Exception):
+        st.warning("Brak sekcji [email] w Secrets — emaile nie zostaną wysłane.")
         return {"error": "brak konfiguracji email"}
 
     proc   = PROCEDURES.get(procedure, {})
@@ -507,7 +448,7 @@ def send_consultation_emails(procedure, info):
     token  = info.get("token", "")
     teraz  = datetime.now().strftime("%d.%m.%Y, %H:%M")
 
-    # Email do klientki – styl oczekiwania na potwierdzenie
+    # ── Email do klientki ──
     if email and "@" in email:
         termin_line = f"<br>Proponowany termin: <strong>{termin}</strong>" if termin else ""
         html_client = f"""<!DOCTYPE html><html><head>{EMAIL_STYLE}</head><body>
@@ -516,7 +457,8 @@ def send_consultation_emails(procedure, info):
           <div class="body">
             <p>Cześć, <strong>{imie}</strong>!</p>
             <p>Twoje zgłoszenie dotarło do nas. Wybrałaś:</p>
-            <div class="box"><strong>{procedure}</strong><br>Czas: {proc.get('time','—')} &nbsp;·&nbsp; Cena: {proc.get('price','—')}{termin_line}</div>
+            <div class="box"><strong>{procedure}</strong><br>
+            Czas: {proc.get('time','—')} &nbsp;·&nbsp; Cena: {proc.get('price','—')}{termin_line}</div>
             <p>Specjalistka potwierdzi termin — dostaniesz osobnego maila z potwierdzeniem i wskazówkami jak się przygotować.</p>
             <p>Masz pytania? Zadzwoń: <strong>+48 500 123 456</strong></p>
             <p style="color:#aaa;font-size:0.82rem;">— Zespół BeautyFlow</p>
@@ -525,28 +467,20 @@ def send_consultation_emails(procedure, info):
         </div></body></html>"""
         results["client"] = _send_email(email, f"BeautyFlow – zgłoszenie: {procedure}", html_client)
 
-    # Email do właścicielki – zawsze, z przyciskami i linkiem do apki
+    # ── Email do właścicielki z przyciskami akcji ──
     if owner_email:
-        action_html = ""
+        action_html  = ""
         app_link_html = ""
-
         if app_url:
-            app_link_html = f"""
-            <div style="margin-top:20px;">
-              <a href="{app_url}" class="btn btn-app">→ Otwórz panel aplikacji</a>
-            </div>"""
-
+            app_link_html = f'<div style="margin-top:20px;"><a href="{app_url}" class="btn btn-app">→ Otwórz panel aplikacji</a></div>'
         if token and app_url:
             confirm_url = f"{app_url}?action=confirm&token={token}"
             reject_url  = f"{app_url}?action=reject&token={token}"
             action_html = f"""
             <div style="margin:24px 0 8px;">
-              <p style="font-size:0.85rem;color:#666;margin-bottom:14px;">
-                Kliknij aby podjąć decyzję — klientka automatycznie dostanie maila:
-              </p>
-              <a href="{confirm_url}" class="btn btn-ok">✓ Potwierdź termin</a>
-              &nbsp;
-              <a href="{reject_url}"  class="btn btn-no">✗ Odrzuć</a>
+              <p style="font-size:0.85rem;color:#666;margin-bottom:14px;">Kliknij aby podjąć decyzję — klientka automatycznie dostanie maila:</p>
+              <a href="{confirm_url}" class="btn btn-ok">✓ Potwierdź termin</a>&nbsp;
+              <a href="{reject_url}" class="btn btn-no">✗ Odrzuć</a>
             </div>
             <p style="color:#aaa;font-size:0.75rem;margin-top:10px;">Linki są jednorazowe.</p>"""
 
@@ -561,8 +495,7 @@ def send_consultation_emails(procedure, info):
               {"Termin: <strong>" + termin + "</strong>" if termin else "Termin: <em>nie wybrany</em>"}
             </div>
             <div class="box" style="font-size:0.83rem;color:#666;">{podsum}</div>
-            {action_html}
-            {app_link_html}
+            {action_html}{app_link_html}
           </div>
           <div class="ftr">BeautyFlow AI · System automatyczny</div>
         </div></body></html>"""
@@ -573,7 +506,9 @@ def send_consultation_emails(procedure, info):
         )
     return results
 
-def send_status_email(booking, confirmed):
+
+def send_status_email(booking: dict, confirmed: bool) -> bool:
+    """Email do klientki po potwierdzeniu lub odrzuceniu przez właścicielkę."""
     email = booking.get("email", "")
     if not email or "@" not in email:
         return False
@@ -583,15 +518,13 @@ def send_status_email(booking, confirmed):
     proc   = PROCEDURES.get(zabieg, {})
     if confirmed:
         subj = "BeautyFlow – Twój termin potwierdzony"
-        body = f"""
-        <p>Twój termin jest potwierdzony!</p>
+        body = f"""<p>Twój termin jest potwierdzony!</p>
         <div class="box">Zabieg: <strong>{zabieg}</strong><br>Termin: <strong>{termin}</strong><br>Adres: ul. Złota 12, Warszawa</div>
         <div class="box"><strong>Jak się przygotować:</strong><br>{proc.get('prep','—')}</div>
         <p>Do zobaczenia! W razie pytań: <strong>+48 500 123 456</strong></p>"""
     else:
         subj = "BeautyFlow – informacja o rezerwacji"
-        body = f"""
-        <p>Niestety wybrany termin (<strong>{termin}</strong>) nie jest już dostępny.</p>
+        body = f"""<p>Niestety wybrany termin (<strong>{termin}</strong>) nie jest już dostępny.</p>
         <div class="box">Zabieg: <strong>{zabieg}</strong></div>
         <p>Zapraszamy do ponownego umówienia: +48 500 123 456 · hello@beautyflow.pl</p>"""
     html = f"""<!DOCTYPE html><html><head>{EMAIL_STYLE}</head><body>
@@ -602,25 +535,31 @@ def send_status_email(booking, confirmed):
     </div></body></html>"""
     return _send_email(email, subj, html)
 
-# ─── GOOGLE SHEETS ────────────────────────────────────────
+# ─────────────────────────────────────────────
+# GOOGLE SHEETS
+# ─────────────────────────────────────────────
 @st.cache_resource(ttl=300)
 def get_sheets_client():
     try:
         creds = Credentials.from_service_account_info(
             st.secrets["gcp_service_account"],
-            scopes=["https://www.googleapis.com/auth/spreadsheets","https://www.googleapis.com/auth/drive"],
+            scopes=["https://www.googleapis.com/auth/spreadsheets",
+                    "https://www.googleapis.com/auth/drive"],
         )
         return gspread.authorize(creds)
     except Exception:
         return None
 
+
 def get_spreadsheet():
     gc = get_sheets_client()
-    if not gc: return None
+    if not gc:
+        return None
     try:
         return gc.open_by_key(st.secrets["sheets"]["sheet_id"])
     except Exception:
         return None
+
 
 def _get_ws(sp, name, headers):
     try:
@@ -631,11 +570,14 @@ def _get_ws(sp, name, headers):
         ws.format(f"A1:{chr(64+len(headers))}1", {"textFormat": {"bold": True}})
         return ws
 
+
 def save_consultation(procedure, info, messages):
     try:
         sp = get_spreadsheet()
-        if not sp: return False
-        ws = _get_ws(sp, "Konsultacje", ["Data","Imię","Email","Telefon","Zabieg","Termin","Wiadomości","Podsumowanie","Status"])
+        if not sp:
+            return False
+        ws = _get_ws(sp, "Konsultacje",
+                     ["Data","Imię","Email","Telefon","Zabieg","Termin","Wiadomości","Podsumowanie","Status"])
         ws.append_row([
             datetime.now().strftime("%Y-%m-%d %H:%M"),
             info.get("imie","—"), info.get("email","—"), info.get("telefon","—"),
@@ -647,54 +589,91 @@ def save_consultation(procedure, info, messages):
     except Exception:
         return False
 
+
 def load_slots_from_sheet():
+    """
+    Wczytuje terminy z arkusza.
+    FIX: Status "wolny" = dostępny dla klientki (zajety=False)
+         Każdy inny status = niedostępny (zajety=True)
+    """
     try:
         sp = get_spreadsheet()
-        if not sp: return [], []
+        if not sp:
+            return [], []
         ws_t = _get_ws(sp, "Terminy",    ["Termin","Zabieg","Status"])
         ws_r = _get_ws(sp, "Rezerwacje", ["Data","Token","Termin","Imię","Email","Telefon","Zabieg","Status"])
-        slots   = [{"termin": r["Termin"], "zabieg": r.get("Zabieg",""), "zajety": r.get("Status","wolny") != "wolny"}
-                   for r in ws_t.get_all_records() if r.get("Termin")]
-        pending = [{"token": r.get("Token",""), "imie": r.get("Imię","?"), "email": r.get("Email",""),
-                    "telefon": r.get("Telefon",""), "zabieg": r.get("Zabieg",""), "termin": r.get("Termin","")}
-                   for r in ws_r.get_all_records() if r.get("Status") == "oczekuje"]
+
+        slots = []
+        for r in ws_t.get_all_records():
+            if r.get("Termin"):
+                status = r.get("Status", "wolny").strip().lower()
+                slots.append({
+                    "termin": r["Termin"],
+                    "zabieg": r.get("Zabieg", ""),
+                    "zajety": status != "wolny",   # FIX: tylko "wolny" = dostępny
+                })
+
+        pending = [
+            {
+                "token":   r.get("Token",""),
+                "imie":    r.get("Imię","?"),
+                "email":   r.get("Email",""),
+                "telefon": r.get("Telefon",""),
+                "zabieg":  r.get("Zabieg",""),
+                "termin":  r.get("Termin",""),
+            }
+            for r in ws_r.get_all_records() if r.get("Status") == "oczekuje"
+        ]
         return slots, pending
     except Exception:
         return [], []
 
-def save_slot(termin, status="wolny", zabieg=""):
+
+def save_slot(termin: str, status: str = "wolny", zabieg: str = ""):
+    """
+    Zapisuje lub aktualizuje termin w Sheets.
+    FIX: przy dodawaniu nowego terminu zawsze status="wolny"
+    """
     try:
         sp = get_spreadsheet()
-        if not sp: return
-        ws = _get_ws(sp, "Terminy", ["Termin","Zabieg","Status"])
+        if not sp:
+            return
+        ws   = _get_ws(sp, "Terminy", ["Termin","Zabieg","Status"])
         rows = ws.get_all_records()
         for i, r in enumerate(rows, start=2):
             if r.get("Termin") == termin:
-                ws.update(f"C{i}", [[status]])
+                ws.update(f"C{i}", [[status]])   # aktualizuj tylko Status
                 return
+        # Nowy wpis – dodaj z podanym statusem i zabiegiem
         ws.append_row([termin, zabieg, status])
     except Exception:
         pass
 
-def save_pending(booking):
+
+def save_pending(booking: dict):
     try:
         sp = get_spreadsheet()
-        if not sp: return
-        ws = _get_ws(sp, "Rezerwacje", ["Data","Token","Termin","Imię","Email","Telefon","Zabieg","Status"])
+        if not sp:
+            return
+        ws = _get_ws(sp, "Rezerwacje",
+                     ["Data","Token","Termin","Imię","Email","Telefon","Zabieg","Status"])
         ws.append_row([
             datetime.now().strftime("%Y-%m-%d %H:%M"),
-            booking.get("token",""), booking.get("termin",""),
-            booking.get("imie",""), booking.get("email",""),
-            booking.get("telefon",""), booking.get("zabieg",""), "oczekuje",
+            booking.get("token",""),  booking.get("termin",""),
+            booking.get("imie",""),   booking.get("email",""),
+            booking.get("telefon",""), booking.get("zabieg",""),
+            "oczekuje",
         ])
     except Exception:
         pass
 
-def update_booking_in_sheet(token, new_status):
+
+def update_booking_in_sheet(token: str, new_status: str):
     try:
         sp = get_spreadsheet()
-        if not sp: return
-        ws = sp.worksheet("Rezerwacje")
+        if not sp:
+            return
+        ws   = sp.worksheet("Rezerwacje")
         rows = ws.get_all_records()
         for i, r in enumerate(rows, start=2):
             if r.get("Token") == token:
@@ -703,19 +682,23 @@ def update_booking_in_sheet(token, new_status):
     except Exception:
         pass
 
-# ─── URL AKCJE ────────────────────────────────────────────
+# ─────────────────────────────────────────────
+# URL AKCJE (linki z emaila właścicielki)
+# ─────────────────────────────────────────────
 def handle_url_action():
     params  = st.query_params
     action  = params.get("action", "")
     token   = params.get("token", "")
-    if not action or not token: return
+    if not action or not token:
+        return
     pending = st.session_state.get("pending_bookings", [])
     booking = next((b for b in pending if b.get("token") == token), None)
     if action == "confirm" and booking:
         save_slot(booking.get("termin",""), "zajęty")
         update_booking_in_sheet(token, "potwierdzona")
-        for s in st.session_state.get("available_slots", []):
-            if s["termin"] == booking.get("termin"): s["zajety"] = True
+        for s in st.session_state.get("available_slots",[]):
+            if s["termin"] == booking.get("termin"):
+                s["zajety"] = True
         st.session_state.pending_bookings = [b for b in pending if b.get("token") != token]
         send_status_email(booking, confirmed=True)
         st.success(f"Rezerwacja potwierdzona — {booking.get('imie')} · {booking.get('termin')}")
@@ -723,28 +706,34 @@ def handle_url_action():
     elif action == "reject" and booking:
         save_slot(booking.get("termin",""), "wolny")
         update_booking_in_sheet(token, "odrzucona")
-        for s in st.session_state.get("available_slots", []):
-            if s["termin"] == booking.get("termin"): s["zajety"] = False
+        for s in st.session_state.get("available_slots",[]):
+            if s["termin"] == booking.get("termin"):
+                s["zajety"] = False
         st.session_state.pending_bookings = [b for b in pending if b.get("token") != token]
         send_status_email(booking, confirmed=False)
-        st.info("Rezerwacja odrzucona — klientka poinformowana emailem.")
+        st.info("Rezerwacja odrzucona — klientka poinformowana.")
         st.query_params.clear()
     elif booking is None and token:
-        st.warning("Link wygasł lub rezerwacja już została przetworzona.")
+        st.warning("Link wygasł lub rezerwacja już przetworzona.")
         st.query_params.clear()
 
-# ─── PANEL WŁAŚCICIELKI – sidebar ─────────────────────────
+# ─────────────────────────────────────────────
+# PANEL WŁAŚCICIELKI (sidebar)
+# ─────────────────────────────────────────────
 def render_owner_panel():
     with st.sidebar:
         render_logo()
-        st.markdown('<div style="height:1px;background:#e6e4dc;margin-bottom:1rem;"></div>', unsafe_allow_html=True)
+        st.markdown('<div style="height:1px;background:#e6e4dc;margin-bottom:1rem;"></div>',
+                    unsafe_allow_html=True)
 
         if "owner_auth" not in st.session_state:
             st.session_state.owner_auth = False
 
         if not st.session_state.owner_auth:
-            st.markdown('<div style="font-size:0.8rem;color:#aaa;margin-bottom:8px;">Panel właścicielki</div>', unsafe_allow_html=True)
-            pw = st.text_input("Hasło dostępu", type="password", key="opw", placeholder="Wpisz hasło...", label_visibility="collapsed")
+            st.markdown('<div style="font-size:0.8rem;color:#aaa;margin-bottom:8px;">Panel właścicielki</div>',
+                        unsafe_allow_html=True)
+            pw = st.text_input("Hasło dostępu", type="password", key="opw",
+                               placeholder="Wpisz hasło...", label_visibility="collapsed")
             if st.button("Zaloguj →", key="ologin", use_container_width=True):
                 try:
                     correct = st.secrets["app"]["owner_password"]
@@ -760,74 +749,96 @@ def render_owner_panel():
                     st.error("Nieprawidłowe hasło")
             return
 
-        st.markdown('<div style="font-size:0.74rem;color:#2d6e4a;margin-bottom:12px;font-weight:500;">✓ Zalogowano</div>', unsafe_allow_html=True)
+        st.markdown('<div style="font-size:0.74rem;color:#2d6e4a;margin-bottom:12px;font-weight:500;">✓ Zalogowano</div>',
+                    unsafe_allow_html=True)
 
         # Status integracji
         groq_ok   = "app" in st.secrets and "groq_api_key" in st.secrets.get("app", {})
         sheets_ok = "gcp_service_account" in st.secrets
         email_ok  = "email" in st.secrets
         def dot(ok): return f'<span style="color:{"#2d6e4a" if ok else "#b83232"};font-size:0.55rem;">●</span>'
-        st.markdown(f'<div style="font-size:0.72rem;color:#aaa;margin-bottom:14px;">{dot(groq_ok)} Groq &nbsp; {dot(sheets_ok)} Sheets &nbsp; {dot(email_ok)} Gmail</div>', unsafe_allow_html=True)
+        st.markdown(
+            f'<div style="font-size:0.72rem;color:#aaa;margin-bottom:14px;">'
+            f'{dot(groq_ok)} Groq &nbsp; {dot(sheets_ok)} Sheets &nbsp; {dot(email_ok)} Gmail</div>',
+            unsafe_allow_html=True
+        )
 
         # ── Dodaj termin ──
-        st.markdown('<div style="font-size:0.8rem;font-weight:600;color:#1c1c1a;margin-bottom:8px;">Dodaj termin</div>', unsafe_allow_html=True)
+        st.markdown('<div style="font-size:0.8rem;font-weight:600;color:#1c1c1a;margin-bottom:8px;">Dodaj termin</div>',
+                    unsafe_allow_html=True)
         proc_names = list(PROCEDURES.keys())
         sel_proc = st.selectbox("Zabieg", proc_names, key="slot_proc", label_visibility="visible")
-        dc1, dc2 = st.columns([3,2])
+
+        dc1, dc2 = st.columns([3, 2])
         with dc1:
-            slot_date = st.date_input("Data", value=date.today(), key="slot_date_picker", format="DD.MM.YYYY", label_visibility="collapsed")
+            slot_date = st.date_input("Data", value=date.today(), key="slot_date_picker",
+                                      format="DD.MM.YYYY", label_visibility="collapsed")
         with dc2:
-            available_hours = [f"{h:02d}:{m:02d}" for h in range(9,20) for m in [0,30]]
-            sel_hour = st.selectbox("Godz.", available_hours, key="slot_hour_picker", label_visibility="collapsed")
+            available_hours = [f"{h:02d}:{m:02d}" for h in range(9, 20) for m in [0, 30]]
+            sel_hour = st.selectbox("Godz.", available_hours, key="slot_hour_picker",
+                                    label_visibility="collapsed")
 
         ca, cb = st.columns(2)
         with ca:
             if st.button("Dodaj", key="addslot", use_container_width=True):
                 termin_str = f"{slot_date.strftime('%d.%m.%Y')}, {sel_hour}"
-                existing = [s["termin"] for s in st.session_state.get("available_slots", [])]
+                existing   = [s["termin"] for s in st.session_state.get("available_slots", [])]
                 if termin_str in existing:
-                    st.warning("Już istnieje")
+                    st.warning("Termin już istnieje")
                 else:
-                    # POPRAWKA: dodaj jako WOLNY (nie zajęty) – widoczny dla klientek
+                    # FIX: dodaj jako zajety=False (wolny, dostępny dla klientki)
                     st.session_state.setdefault("available_slots", []).append(
                         {"termin": termin_str, "zabieg": sel_proc, "zajety": False}
                     )
-                    save_slot(termin_str, "wolny", sel_proc)
+                    save_slot(termin_str, "wolny", sel_proc)  # FIX: zawsze "wolny" przy dodawaniu
                     st.success(f"Dodano: {termin_str}")
                     st.rerun()
         with cb:
             if st.button("Wyczyść wolne", key="clrslot", use_container_width=True):
-                st.session_state.available_slots = [s for s in st.session_state.get("available_slots",[]) if s["zajety"]]
+                st.session_state.available_slots = [
+                    s for s in st.session_state.get("available_slots", []) if s["zajety"]
+                ]
                 try:
                     sp = get_spreadsheet()
                     if sp:
-                        ws = sp.worksheet("Terminy")
+                        ws   = sp.worksheet("Terminy")
                         rows = ws.get_all_records()
-                        for i in reversed([i+2 for i,r in enumerate(rows) if r.get("Status")=="wolny"]):
+                        for i in reversed([i+2 for i,r in enumerate(rows) if r.get("Status","").strip().lower()=="wolny"]):
                             ws.delete_rows(i)
-                except Exception: pass
+                except Exception:
+                    pass
                 st.rerun()
 
         # Lista terminów
         slots_all = st.session_state.get("available_slots", [])
         if slots_all:
-            st.markdown('<div style="height:1px;background:#e6e4dc;margin:10px 0 8px;"></div>', unsafe_allow_html=True)
-            st.markdown('<div style="font-size:0.7rem;letter-spacing:0.1em;color:#aaa;text-transform:uppercase;margin-bottom:6px;">Terminy</div>', unsafe_allow_html=True)
+            st.markdown('<div style="height:1px;background:#e6e4dc;margin:10px 0 8px;"></div>',
+                        unsafe_allow_html=True)
+            st.markdown('<div style="font-size:0.7rem;letter-spacing:0.1em;color:#aaa;text-transform:uppercase;margin-bottom:6px;">Terminy</div>',
+                        unsafe_allow_html=True)
             by_proc = {}
             for s in slots_all:
                 by_proc.setdefault(s.get("zabieg","Inne"), []).append(s)
             for proc_name, proc_slots in by_proc.items():
-                st.markdown(f'<div style="font-size:0.64rem;letter-spacing:0.08em;color:#aaa;text-transform:uppercase;margin:8px 0 3px;">{proc_name}</div>', unsafe_allow_html=True)
+                st.markdown(f'<div style="font-size:0.64rem;letter-spacing:0.08em;color:#aaa;text-transform:uppercase;margin:8px 0 3px;">{proc_name}</div>',
+                            unsafe_allow_html=True)
                 for s in proc_slots:
                     dot_c  = "#b83232" if s["zajety"] else "#2d6e4a"
                     status = "zajęty" if s["zajety"] else "wolny"
-                    st.markdown(f'<div style="font-size:0.76rem;color:#555;padding:2px 0;"><span style="color:{dot_c};">●</span> {s["termin"]} <span style="color:#bbb;font-size:0.7rem;">({status})</span></div>', unsafe_allow_html=True)
+                    st.markdown(
+                        f'<div style="font-size:0.76rem;color:#555;padding:2px 0;">'
+                        f'<span style="color:{dot_c};">●</span> {s["termin"]} '
+                        f'<span style="color:#bbb;font-size:0.7rem;">({status})</span></div>',
+                        unsafe_allow_html=True
+                    )
 
         # ── Rezerwacje do potwierdzenia ──
         pending = st.session_state.get("pending_bookings", [])
         if pending:
-            st.markdown('<div style="height:1px;background:#e6e4dc;margin:14px 0 8px;"></div>', unsafe_allow_html=True)
-            st.markdown(f'<div style="font-size:0.7rem;letter-spacing:0.1em;text-transform:uppercase;color:#aaa;margin-bottom:8px;">Do potwierdzenia ({len(pending)})</div>', unsafe_allow_html=True)
+            st.markdown('<div style="height:1px;background:#e6e4dc;margin:14px 0 8px;"></div>',
+                        unsafe_allow_html=True)
+            st.markdown(f'<div style="font-size:0.7rem;letter-spacing:0.1em;text-transform:uppercase;color:#aaa;margin-bottom:8px;">Do potwierdzenia ({len(pending)})</div>',
+                        unsafe_allow_html=True)
             for i, b in enumerate(pending):
                 st.markdown(
                     f'<div style="font-size:0.78rem;color:#1c1c1a;line-height:1.7;'
@@ -846,7 +857,8 @@ def render_owner_panel():
                         save_slot(b.get("termin",""), "zajęty")
                         update_booking_in_sheet(b.get("token",""), "potwierdzona")
                         for s in st.session_state.get("available_slots",[]):
-                            if s["termin"] == b.get("termin"): s["zajety"] = True
+                            if s["termin"] == b.get("termin"):
+                                s["zajety"] = True
                         send_status_email(b, confirmed=True)
                         st.session_state.pending_bookings.pop(i)
                         st.rerun()
@@ -855,12 +867,14 @@ def render_owner_panel():
                         save_slot(b.get("termin",""), "wolny")
                         update_booking_in_sheet(b.get("token",""), "odrzucona")
                         for s in st.session_state.get("available_slots",[]):
-                            if s["termin"] == b.get("termin"): s["zajety"] = False
+                            if s["termin"] == b.get("termin"):
+                                s["zajety"] = False
                         send_status_email(b, confirmed=False)
                         st.session_state.pending_bookings.pop(i)
                         st.rerun()
 
-        st.markdown('<div style="height:1px;background:#e6e4dc;margin:14px 0 8px;"></div>', unsafe_allow_html=True)
+        st.markdown('<div style="height:1px;background:#e6e4dc;margin:14px 0 8px;"></div>',
+                    unsafe_allow_html=True)
         r1, r2 = st.columns(2)
         with r1:
             if st.button("↻ Odśwież", key="refresh", use_container_width=True):
@@ -873,15 +887,20 @@ def render_owner_panel():
                 st.session_state.owner_auth = False
                 st.rerun()
 
-# ─── HEADER ───────────────────────────────────────────────
+# ─────────────────────────────────────────────
+# HEADER + PICKER
+# ─────────────────────────────────────────────
 def render_header():
     promo_items = " <span class='ticker-dot'>·</span> ".join(PROMOTIONS)
     st.markdown(f"""
     <div style="padding:2rem 0 0.4rem;">
-      <div style="font-family:'Cormorant Garamond',serif;font-size:2.6rem;font-weight:500;color:#1c1c1a;letter-spacing:0.02em;line-height:1.1;">BeautyFlow</div>
-      <div style="font-size:0.72rem;letter-spacing:0.22em;color:#aaa;text-transform:uppercase;margin-top:7px;">Studio Urody · Konsultant AI</div>
+      <div style="font-family:'Cormorant Garamond',serif;font-size:2.6rem;font-weight:500;
+                  color:#1c1c1a;letter-spacing:0.02em;line-height:1.1;">BeautyFlow</div>
+      <div style="font-size:0.72rem;letter-spacing:0.22em;color:#aaa;text-transform:uppercase;margin-top:7px;">
+        Studio Urody · Konsultant AI</div>
     </div>
-    <div style="background:#f3f2ed;border:1px solid #e6e4dc;border-radius:10px;padding:0.85rem 1.3rem;margin:1rem 0 0.6rem;font-size:0.9rem;color:#555;line-height:2.0;">
+    <div style="background:#f3f2ed;border:1px solid #e6e4dc;border-radius:10px;
+                padding:0.85rem 1.3rem;margin:1rem 0 0.6rem;font-size:0.9rem;color:#555;line-height:2.0;">
       <span style="color:#1c1c1a;font-weight:500;">ul. Złota 12, Warszawa</span>
       &nbsp;·&nbsp; +48 500 123 456 &nbsp;·&nbsp; Pon–Pt 9–20, Sob 9–16
     </div>
@@ -890,7 +909,7 @@ def render_header():
     </div>
     """, unsafe_allow_html=True)
 
-# ─── PICKER ───────────────────────────────────────────────
+
 def render_picker():
     if st.session_state.get("_picker_loading"):
         name     = st.session_state["_picker_loading"]
@@ -906,11 +925,12 @@ def render_picker():
         return
 
     render_header()
-
     st.markdown("""
     <div style="margin:1.2rem 0 1rem;">
-      <div style="font-family:'Cormorant Garamond',serif;font-size:1.9rem;font-weight:500;color:#1c1c1a;line-height:1.2;margin-bottom:8px;">Na co chcesz się umówić?</div>
-      <div style="font-size:0.96rem;color:#aaa;">Wybierz zabieg — Sofia przeprowadzi krótką konsultację i wyśle podsumowanie na email.</div>
+      <div style="font-family:'Cormorant Garamond',serif;font-size:1.9rem;font-weight:500;
+                  color:#1c1c1a;line-height:1.2;margin-bottom:8px;">Na co chcesz się umówić?</div>
+      <div style="font-size:0.96rem;color:#aaa;">
+        Wybierz zabieg — Sofia przeprowadzi krótką konsultację i wyśle podsumowanie na email.</div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -930,7 +950,9 @@ def render_picker():
                 st.session_state["_picker_loading"] = name
                 st.rerun()
 
-# ─── CHAT ─────────────────────────────────────────────────
+# ─────────────────────────────────────────────
+# CZAT
+# ─────────────────────────────────────────────
 def render_chat():
     procedure  = st.session_state.get("chosen_procedure", "")
     messages   = st.session_state.get("messages", [])
@@ -938,7 +960,7 @@ def render_chat():
     saved      = st.session_state.get("saved", False)
     p          = PROCEDURES.get(procedure, {})
 
-    col_title, col_back = st.columns([5,1])
+    col_title, col_back = st.columns([5, 1])
     with col_title:
         st.markdown(f"""
         <div style="margin-bottom:1rem;padding-top:1.5rem;">
@@ -955,57 +977,82 @@ def render_chat():
             st.session_state.chat_stage = "pick"
             st.rerun()
 
-    st.markdown('<div style="height:1px;background:#e6e4dc;margin-bottom:1rem;"></div>', unsafe_allow_html=True)
+    st.markdown('<div style="height:1px;background:#e6e4dc;margin-bottom:1rem;"></div>',
+                unsafe_allow_html=True)
 
+    # ── Historia wiadomości ──
     for msg in messages:
         avatar = "🌿" if msg["role"] == "assistant" else "👤"
         with st.chat_message(msg["role"], avatar=avatar):
             st.markdown(msg["content"])
 
+    # FIX SCROLL: anchor na dole czatu, JS scroll po rerun
+    st.markdown('<div id="chat-bottom"></div>', unsafe_allow_html=True)
+    st.markdown("""
+    <script>
+        const el = document.getElementById('chat-bottom');
+        if(el) el.scrollIntoView({behavior:'smooth', block:'end'});
+    </script>
+    """, unsafe_allow_html=True)
+
     current_stage = conv_state.get("stage", STAGE_GREETING)
 
     # ── Wybór terminów ──
     if current_stage == STAGE_SLOTS and not saved and not st.session_state.get("slot_chosen"):
+
+        # FIX FILTROWANIE: porównaj exact match nazwy zabiegu
+        all_slots = st.session_state.get("available_slots", [])
         available = [
-            s for s in st.session_state.get("available_slots", [])
-            if not s["zajety"] and (not s.get("zabieg") or s.get("zabieg") == procedure)
+            s for s in all_slots
+            if not s["zajety"]
+            and s.get("zabieg", "").strip() == procedure.strip()
         ]
-        st.markdown('<div style="font-size:0.78rem;color:#aaa;letter-spacing:0.1em;text-transform:uppercase;margin:12px 0 8px;">Dostępne terminy</div>', unsafe_allow_html=True)
+
+        st.markdown(
+            '<div style="font-size:0.78rem;color:#aaa;letter-spacing:0.1em;'
+            'text-transform:uppercase;margin:12px 0 8px;">Dostępne terminy</div>',
+            unsafe_allow_html=True
+        )
+
         if available:
-            n = min(len(available), 3)
+            # Pokaż max 3 w rzędzie
+            n         = min(len(available), 3)
             slot_cols = st.columns(n, gap="small")
             for i, s in enumerate(available):
                 with slot_cols[i % n]:
                     st.markdown('<div class="slot-btn">', unsafe_allow_html=True)
                     if st.button(s["termin"], key=f"slot_{i}", use_container_width=True):
-                        s["zajety"] = True
+                        # FIX: zaznacz jako zajęty lokalnie od razu
+                        for slot in st.session_state.available_slots:
+                            if slot["termin"] == s["termin"]:
+                                slot["zajety"] = True
+                                break
                         st.session_state.slot_chosen = s["termin"]
                         messages.append({"role": "user", "content": f"Wybieram termin: {s['termin']}"})
                         reply = (
-                            f"Zapisałam termin **{s['termin']}**. "
-                            "Zgłoszenie czeka na potwierdzenie przez specjalistkę — dostaniesz maila kiedy to nastąpi.\n\n"
-                            "Proszę podaj adres email, żebym mogła wysłać podsumowanie.\n\n"
-                            "Gdy wszystko gotowe — kliknij przycisk **Zapisz i wyślij podsumowanie** poniżej."
+                            f"Świetnie! Zapisałam termin **{s['termin']}**. "
+                            "Zgłoszenie czeka na potwierdzenie przez specjalistkę — dostaniesz maila gdy to nastąpi.\n\n"
+                            "Proszę podaj adres email, żebym mogła wysłać podsumowanie i potwierdzenie terminu."
                         )
                         messages.append({"role": "assistant", "content": reply})
-                        conv_state["stage"] = STAGE_EMAIL
+                        conv_state["stage"]     = STAGE_EMAIL
                         st.session_state.messages   = messages
                         st.session_state.conv_state = conv_state
                         st.rerun()
                     st.markdown('</div>', unsafe_allow_html=True)
         else:
-            st.info("Brak dostępnych terminów. Możemy zapisać Twoje dane — specjalistka oddzwoni.")
+            st.info("Brak dostępnych terminów dla tego zabiegu. Możemy zapisać Twoje dane — specjalistka oddzwoni.")
             if st.button("Zapisz moje dane i czekam na kontakt", key="no_slots_save"):
-                reply = "Zapiszę Twoje dane i specjalistka oddzwoni. Proszę podaj adres email."
+                reply = "Zapiszę Twoje dane. Proszę podaj adres email — specjalistka skontaktuje się z Tobą wkrótce."
                 messages.append({"role": "assistant", "content": reply})
-                conv_state["stage"] = STAGE_EMAIL
+                conv_state["stage"]     = STAGE_EMAIL
                 st.session_state.messages   = messages
                 st.session_state.conv_state = conv_state
                 st.rerun()
 
+    # ── CTA: Zapisz i wyślij ──
     slot_chosen    = st.session_state.get("slot_chosen")
     email_in_state = conv_state.get("email", "")
-
     can_save = (
         not saved
         and current_stage in [STAGE_EMAIL, STAGE_DONE, STAGE_CONTRA]
@@ -1018,16 +1065,18 @@ def render_chat():
     )
 
     if can_save:
-        st.markdown('<div style="height:1px;background:#e6e4dc;margin:1.5rem 0 1rem;"></div>', unsafe_allow_html=True)
+        st.markdown('<div style="height:1px;background:#e6e4dc;margin:1.5rem 0 1rem;"></div>',
+                    unsafe_allow_html=True)
         st.markdown("""
-        <div style="background:#fdf3d8;border:1px solid rgba(212,168,67,0.4);border-radius:10px;padding:1rem 1.3rem;margin-bottom:1rem;">
+        <div style="background:#fdf3d8;border:1px solid rgba(212,168,67,0.4);border-radius:10px;
+                    padding:1rem 1.3rem;margin-bottom:1rem;">
           <div style="font-size:1rem;font-weight:600;color:#1c1c1a;margin-bottom:4px;">Konsultacja zakończona</div>
           <div style="font-size:0.88rem;color:#555;line-height:1.6;">
             Kliknij poniższy przycisk, żeby <strong>zapisać rezerwację</strong> i otrzymać potwierdzenie na email.
           </div>
         </div>
         """, unsafe_allow_html=True)
-        _, col_btn, _ = st.columns([1,2,1])
+        _, col_btn, _ = st.columns([1, 2, 1])
         with col_btn:
             st.markdown('<div class="cta-save-wrap">', unsafe_allow_html=True)
             if st.button("Zapisz i wyślij podsumowanie", use_container_width=True, key="save_btn"):
@@ -1035,16 +1084,19 @@ def render_chat():
                 if slot_chosen:
                     info["termin"] = slot_chosen
 
-                tok = secrets.token_urlsafe(16)
+                tok          = secrets.token_urlsafe(16)
                 info["token"] = tok
 
                 if slot_chosen:
                     booking = {
-                        "token": tok, "imie": info.get("imie","?"),
-                        "email": info.get("email",""), "telefon": info.get("telefon",""),
-                        "zabieg": procedure, "termin": slot_chosen,
+                        "token":   tok,
+                        "imie":    info.get("imie","?"),
+                        "email":   info.get("email",""),
+                        "telefon": info.get("telefon",""),
+                        "zabieg":  procedure,
+                        "termin":  slot_chosen,
                     }
-                    st.session_state.setdefault("pending_bookings", []).append(booking)
+                    st.session_state.setdefault("pending_bookings",[]).append(booking)
                     save_pending(booking)
                     save_slot(slot_chosen, "zarezerwowany")
 
@@ -1052,10 +1104,10 @@ def render_chat():
                 email_r  = send_consultation_emails(procedure, info)
 
                 lines = []
-                if sheet_ok:              lines.append("✓ Zapisano")
-                if email_r.get("client"): lines.append(f"✓ Email wysłany na {info.get('email','')}")
-                if email_r.get("owner"):  lines.append("✓ Powiadomienie wysłane do właścicielki")
-                if slot_chosen:           lines.append(f"✓ Termin {slot_chosen} oczekuje na potwierdzenie")
+                if sheet_ok:               lines.append("✓ Zapisano w arkuszu")
+                if email_r.get("client"):  lines.append(f"✓ Email wysłany na {info.get('email','')}")
+                if email_r.get("owner"):   lines.append("✓ Powiadomienie wysłane do właścicielki")
+                if slot_chosen:            lines.append(f"✓ Termin {slot_chosen} oczekuje na potwierdzenie")
 
                 st.success("\n\n".join(lines) if lines else "Zapisano!")
                 st.session_state.saved = True
@@ -1067,11 +1119,13 @@ def render_chat():
         st.markdown("""
         <div style="background:#fdf3d8;border:1px solid rgba(212,168,67,0.4);border-radius:12px;
                     padding:1.8rem;text-align:center;margin:1.5rem 0;">
-          <div style="font-family:'Cormorant Garamond',serif;font-size:1.4rem;font-weight:500;color:#1c1c1a;margin-bottom:6px;">Rezerwacja zapisana</div>
-          <div style="font-size:0.9rem;color:#666;">Sprawdź skrzynkę email — wysłałyśmy potwierdzenie z detalami.</div>
+          <div style="font-family:'Cormorant Garamond',serif;font-size:1.4rem;font-weight:500;
+                      color:#1c1c1a;margin-bottom:6px;">Rezerwacja zapisana</div>
+          <div style="font-size:0.9rem;color:#666;">
+            Sprawdź skrzynkę email — wysłałyśmy potwierdzenie z detalami.</div>
         </div>
         """, unsafe_allow_html=True)
-        _, col_new, _ = st.columns([1,2,1])
+        _, col_new, _ = st.columns([1, 2, 1])
         with col_new:
             if st.button("← Wróć na stronę główną", use_container_width=True, key="new_btn"):
                 for key in ["messages","saved","slot_chosen","chat_stage","chosen_procedure","conv_state"]:
@@ -1085,14 +1139,20 @@ def render_chat():
             messages.append({"role": "user", "content": prompt})
             with st.chat_message("user", avatar="👤"):
                 st.markdown(prompt)
+
             reply, conv_state = conversation_next(procedure, prompt, conv_state)
-            display = "Poniżej znajdziesz dostępne terminy — wybierz ten, który Ci odpowiada:" if reply == "__SHOW_SLOTS__" else reply
+            display = (
+                "Poniżej znajdziesz dostępne terminy — wybierz ten, który Ci odpowiada:"
+                if reply == "__SHOW_SLOTS__" else reply
+            )
             messages.append({"role": "assistant", "content": display})
             st.session_state.messages   = messages
             st.session_state.conv_state = conv_state
             st.rerun()
 
-# ─── MAIN ─────────────────────────────────────────────────
+# ─────────────────────────────────────────────
+# MAIN
+# ─────────────────────────────────────────────
 def main():
     inject_css()
 
@@ -1117,6 +1177,7 @@ def main():
         render_picker()
     else:
         render_chat()
+
 
 if __name__ == "__main__":
     main()
