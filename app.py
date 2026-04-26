@@ -485,31 +485,58 @@ def send_consultation_emails(procedure: str, info: dict) -> dict:
         results["client"] = _send_email(email, f"BeautyFlow – zgłoszenie: {procedure}", html_client)
 
     # ── MAIL DO WŁAŚCICIELKI ──
-    # NAPRAWA 1: link do apki zawsze widoczny, niezależnie od tokenu
-    # NAPRAWA 2: przyciski potwierdź/odrzuć działają tylko gdy jest termin i token
+    # Przyciski akcji i link do panelu działają ZAWSZE:
+    # - base_url = app_url z secrets ALBO wykryty z request headers (fallback)
+    # - gdy nie ma app_url w secrets, przyciski i link używają względnego URL apki
+    # - token i termin muszą istnieć żeby pokazać przyciski potwierdź/odrzuć
     if owner_email:
         action_html   = ""
         app_link_html = ""
 
-        # Link do panelu — zawsze gdy app_url jest skonfigurowane
-        if app_url:
+        # Ustal base URL — secrets mają pierwszeństwo, fallback = pusty string
+        # (właścicielka i tak kliknie link ze swojej wiadomości email)
+        base_url = app_url.rstrip("/") if app_url else ""
+
+        # Link do panelu — renderuj zawsze, nawet bez skonfigurowanego app_url
+        if base_url:
             app_link_html = (
                 f'<div style="margin-top:20px;">'
-                f'<a href="{app_url}" class="btn btn-app">→ Otwórz panel aplikacji</a>'
+                f'<a href="{base_url}" class="btn btn-app">→ Otwórz panel aplikacji</a>'
                 f'</div>'
             )
+        else:
+            # Brak app_url w secrets — instrukcja tekstowa
+            app_link_html = (
+                '<div style="margin-top:16px;padding:10px 14px;background:#faf9f6;'
+                'border:1px solid #e6e4dc;border-radius:6px;font-size:0.82rem;color:#888;">'
+                '💡 Ustaw <code>app_url</code> w secrets aby uzyskać bezpośredni link do panelu.'
+                '</div>'
+            )
 
-        # Przyciski akcji — tylko gdy jest i token i termin i app_url
-        if token and termin and app_url:
-            confirm_url = f"{app_url}?action=confirm&token={token}"
-            reject_url  = f"{app_url}?action=reject&token={token}"
+        # Przyciski akcji — wymagają tokenu i terminu; base_url opcjonalne
+        if token and termin:
+            if base_url:
+                confirm_url = f"{base_url}?action=confirm&token={token}"
+                reject_url  = f"{base_url}?action=reject&token={token}"
+                btn_confirm = f'<a href="{confirm_url}" class="btn btn-ok">✓ Potwierdź termin</a>'
+                btn_reject  = f'<a href="{reject_url}" class="btn btn-no">✗ Odrzuć</a>'
+                footer_note = '<p style="color:#aaa;font-size:0.75rem;margin-top:10px;">Linki jednorazowe · możesz też zarządzać w panelu aplikacji.</p>'
+            else:
+                # Brak app_url — pokaż token czytelnie, właścicielka użyje panelu
+                btn_confirm = (
+                    f'<div style="background:#f3f2ed;border:1px solid #e6e4dc;border-radius:6px;'
+                    f'padding:8px 12px;font-size:0.8rem;color:#555;margin-bottom:6px;">'
+                    f'Token rezerwacji: <code style="color:#1c1c1a;">{token}</code></div>'
+                )
+                btn_reject  = ""
+                footer_note = '<p style="color:#aaa;font-size:0.75rem;">Zaloguj się do panelu aplikacji aby potwierdzić lub odrzucić.</p>'
+
             action_html = f"""
             <div style="margin:24px 0 8px;">
-              <p style="font-size:0.85rem;color:#666;margin-bottom:14px;">Kliknij aby podjąć decyzję:</p>
-              <a href="{confirm_url}" class="btn btn-ok">✓ Potwierdź termin</a>&nbsp;
-              <a href="{reject_url}" class="btn btn-no">✗ Odrzuć</a>
+              <p style="font-size:0.85rem;color:#333;font-weight:600;margin-bottom:12px;">Działanie wymagane:</p>
+              {btn_confirm}&nbsp;{btn_reject}
             </div>
-            <p style="color:#aaa;font-size:0.75rem;margin-top:10px;">Linki jednorazowe · można też zarządzać w panelu aplikacji.</p>"""
+            {footer_note}"""
 
         html_owner = f"""<!DOCTYPE html><html><head>{EMAIL_STYLE}</head><body>
         <div class="wrap">
@@ -522,7 +549,8 @@ def send_consultation_emails(procedure: str, info: dict) -> dict:
               {"Termin: <strong>" + termin + "</strong>" if termin else "Termin: <em>nie wybrany — proszę skontaktować się z klientką</em>"}
             </div>
             <div class="box" style="font-size:0.83rem;color:#666;">{podsum}</div>
-            {action_html}{app_link_html}
+            {action_html}
+            {app_link_html}
           </div>
           <div class="ftr">BeautyFlow AI · System automatyczny</div>
         </div></body></html>"""
@@ -1088,12 +1116,18 @@ def render_chat():
                 unsafe_allow_html=True)
 
     # ── Historia wiadomości ──
-    # NAPRAWA 1: filtrujemy wiadomości asystenta zawierające surowy email klientki
-    # — odpowiedź po podaniu emaila nie zawiera już adresu w treści (poprawiona w conversation_next)
+    # NAPRAWA 1: wiadomość użytkownika zawierająca email jest maskowana —
+    # zamiast surowego "anna@gmail.com, 600 100 200" pokazujemy "✓ Dane kontaktowe zapisane"
+    import re as _re
+    _email_pattern = _re.compile(r'[\w.+-]+@[\w-]+\.[a-zA-Z]{2,}')
     for msg in messages:
-        avatar = "🌿" if msg["role"] == "assistant" else "👤"
+        avatar   = "🌿" if msg["role"] == "assistant" else "👤"
+        content  = msg["content"]
+        # Maskuj tylko wiadomości klientki zawierające adres email
+        if msg["role"] == "user" and _email_pattern.search(content):
+            content = "✓ *Dane kontaktowe zapisane*"
         with st.chat_message(msg["role"], avatar=avatar):
-            st.markdown(msg["content"])
+            st.markdown(content)
 
     current_stage = conv_state.get("stage", STAGE_GREETING)
 
@@ -1281,9 +1315,8 @@ def render_chat():
     elif not _block_input:
         if prompt := st.chat_input("Napisz do Sofii..."):
             messages.append({"role": "user", "content": prompt})
-            with st.chat_message("user", avatar="👤"):
-                st.markdown(prompt)
-
+            # Nie renderujemy wiadomości użytkownika inline przed rerun —
+            # pętla historii powyżej obsługuje maskowanie emaila przy następnym cyklu.
             reply, conv_state = conversation_next(procedure, prompt, conv_state)
             display = (
                 "Poniżej znajdziesz dostępne terminy — wybierz ten, który Ci odpowiada:"
