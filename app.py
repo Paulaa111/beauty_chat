@@ -187,9 +187,9 @@ def conversation_next(procedure, user_msg, state):
             state["telefon"] = telefon or "—"
             state["stage"]   = STAGE_DONE
             if telefon:
-                return f"Zapisałam email **{email}** i telefon **{telefon}**. Kliknij przycisk **Zapisz i wyślij podsumowanie** poniżej.", state
+                return f"Dziękuję! Zapisałam zgłoszenie. Kliknij przycisk **Zapisz i wyślij podsumowanie** poniżej.", state
             else:
-                return f"Zapisałam email **{email}**. Numer telefonu możesz dopisać lub od razu kliknąć **Zapisz i wyślij podsumowanie**.", state
+                return f"Zapisałam email. Numer telefonu możesz dopisać lub od razu kliknąć **Zapisz i wyślij podsumowanie**.", state
         else:
             return "Nie rozpoznałam adresu email — proszę wpisz go razem z numerem, np.: anna@gmail.com, 600 100 200", state
 
@@ -376,7 +376,7 @@ def inject_css():
     .stSelectbox>div>div { background:var(--surface) !important; border-color:var(--border) !important; border-radius:8px !important; }
     [data-testid="InputInstructions"] { display:none !important; }
 
-    /* FIX SCROLL: Kotwica na dole czatu — ukryty element który przyciąga scroll */
+    /* FIX SCROLL */
     #chat-bottom-anchor { height: 1px; }
 
     hr { border-color:var(--border) !important; margin:1rem 0 !important; }
@@ -465,6 +465,7 @@ def send_consultation_emails(procedure: str, info: dict) -> dict:
     token   = info.get("token", "")
     teraz   = datetime.now().strftime("%d.%m.%Y, %H:%M")
 
+    # ── MAIL DO KLIENTKI ──
     if email and "@" in email:
         termin_line = f"<br>Proponowany termin: <strong>{termin}</strong>" if termin else ""
         html_client = f"""<!DOCTYPE html><html><head>{EMAIL_STYLE}</head><body>
@@ -483,12 +484,23 @@ def send_consultation_emails(procedure: str, info: dict) -> dict:
         </div></body></html>"""
         results["client"] = _send_email(email, f"BeautyFlow – zgłoszenie: {procedure}", html_client)
 
+    # ── MAIL DO WŁAŚCICIELKI ──
+    # NAPRAWA 1: link do apki zawsze widoczny, niezależnie od tokenu
+    # NAPRAWA 2: przyciski potwierdź/odrzuć działają tylko gdy jest termin i token
     if owner_email:
-        action_html = ""
+        action_html   = ""
         app_link_html = ""
+
+        # Link do panelu — zawsze gdy app_url jest skonfigurowane
         if app_url:
-            app_link_html = f'<div style="margin-top:20px;"><a href="{app_url}" class="btn btn-app">→ Otwórz panel aplikacji</a></div>'
-        if token and app_url:
+            app_link_html = (
+                f'<div style="margin-top:20px;">'
+                f'<a href="{app_url}" class="btn btn-app">→ Otwórz panel aplikacji</a>'
+                f'</div>'
+            )
+
+        # Przyciski akcji — tylko gdy jest i token i termin i app_url
+        if token and termin and app_url:
             confirm_url = f"{app_url}?action=confirm&token={token}"
             reject_url  = f"{app_url}?action=reject&token={token}"
             action_html = f"""
@@ -497,7 +509,7 @@ def send_consultation_emails(procedure: str, info: dict) -> dict:
               <a href="{confirm_url}" class="btn btn-ok">✓ Potwierdź termin</a>&nbsp;
               <a href="{reject_url}" class="btn btn-no">✗ Odrzuć</a>
             </div>
-            <p style="color:#aaa;font-size:0.75rem;margin-top:10px;">Linki są jednorazowe.</p>"""
+            <p style="color:#aaa;font-size:0.75rem;margin-top:10px;">Linki jednorazowe · można też zarządzać w panelu aplikacji.</p>"""
 
         html_owner = f"""<!DOCTYPE html><html><head>{EMAIL_STYLE}</head><body>
         <div class="wrap">
@@ -507,7 +519,7 @@ def send_consultation_emails(procedure: str, info: dict) -> dict:
               Imię: <strong>{imie}</strong><br>
               Email: {email or '—'} &nbsp;·&nbsp; Tel: {telefon}<br>
               Zabieg: <strong>{procedure}</strong><br>
-              {"Termin: <strong>" + termin + "</strong>" if termin else "Termin: <em>nie wybrany</em>"}
+              {"Termin: <strong>" + termin + "</strong>" if termin else "Termin: <em>nie wybrany — proszę skontaktować się z klientką</em>"}
             </div>
             <div class="box" style="font-size:0.83rem;color:#666;">{podsum}</div>
             {action_html}{app_link_html}
@@ -550,16 +562,10 @@ def send_status_email(booking: dict, confirmed: bool) -> bool:
     return _send_email(email, subj, html)
 
 # ─────────────────────────────────────────────
-# GOOGLE SHEETS – 2 zakładki zamiast 3
+# GOOGLE SHEETS
 #
-# "Terminy"    – wolne sloty dodawane przez właścicielkę
-#   kolumny: Data dodania | Termin | Zabieg | Status | Token | Imię | Email | Telefon | Podsumowanie
-#
-# "Konsultacje" – archiwum wszystkich konsultacji (w tym bez terminu)
-#   kolumny: Data | Imię | Email | Telefon | Zabieg | Termin | Wiadomości | Podsumowanie | Status | Token
-#
-# Rezerwacje "oczekujące" trzymamy w arkuszu Terminy (Status=zarezerwowany)
-# Nie ma osobnego arkusza Rezerwacje.
+# "Terminy"     – sloty: Data dodania|Termin|Zabieg|Status|Token|Imię|Email|Telefon|Podsumowanie
+# "Konsultacje" – archiwum: Data|Imię|Email|Telefon|Zabieg|Termin|Wiadomości|Podsumowanie|Status|Token
 # ─────────────────────────────────────────────
 SHEET_TERMINY_HEADERS     = ["Data dodania","Termin","Zabieg","Status","Token","Imię","Email","Telefon","Podsumowanie"]
 SHEET_KONSULTACJE_HEADERS = ["Data","Imię","Email","Telefon","Zabieg","Termin","Wiadomości","Podsumowanie","Status","Token"]
@@ -599,19 +605,32 @@ def _get_ws(sp, name: str, headers: list):
 
 
 def save_consultation(procedure: str, info: dict, messages: list) -> bool:
-    """Zapisuje konsultację do arkusza Konsultacje."""
+    """
+    Zapisuje konsultację do arkusza Konsultacje.
+    NAPRAWA 3: token zapisywany zawsze — bez niego pending_bookings jest puste.
+    """
     try:
         sp = get_spreadsheet()
         if not sp:
             return False
         ws = _get_ws(sp, "Konsultacje", SHEET_KONSULTACJE_HEADERS)
+
+        termin = info.get("termin", "")
+        token  = info.get("token", "")
+        # Status "oczekuje" tylko gdy jest termin (= rezerwacja wymagająca potwierdzenia)
+        status = "oczekuje" if termin else "bez terminu"
+
         ws.append_row([
             datetime.now().strftime("%Y-%m-%d %H:%M"),
-            info.get("imie","—"), info.get("email","—"), info.get("telefon","—"),
-            procedure, info.get("termin","—"), len(messages),
+            info.get("imie","—"),
+            info.get("email","—"),
+            info.get("telefon","—"),
+            procedure,
+            termin or "—",
+            len(messages),
             info.get("podsumowanie","—"),
-            "oczekuje" if info.get("termin") else "bez terminu",
-            info.get("token",""),
+            status,
+            token,          # ← NAPRAWA: token zapisywany w kolumnie Token
         ])
         return True
     except Exception:
@@ -620,16 +639,16 @@ def save_consultation(procedure: str, info: dict, messages: list) -> bool:
 
 def load_slots_from_sheet():
     """
-    Ładuje dane z 2 arkuszy:
-    - Terminy: sloty (wolne + zarezerwowane)
-    - Konsultacje: pending bookings (Status=oczekuje i jest token)
+    Ładuje sloty (Terminy) i oczekujące rezerwacje (Konsultacje, Status=oczekuje).
+    NAPRAWA 3: pending pobierane z Konsultacje po tokenie — działa poprawnie.
     """
     try:
         sp = get_spreadsheet()
         if not sp:
             return [], []
 
-        ws_t = _get_ws(sp, "Terminy", SHEET_TERMINY_HEADERS)
+        # ── Terminy ──
+        ws_t   = _get_ws(sp, "Terminy", SHEET_TERMINY_HEADERS)
         rows_t = ws_t.get_all_records()
 
         slots = []
@@ -643,21 +662,23 @@ def load_slots_from_sheet():
                 "zajety": status not in ("wolny",),
             })
 
-        # Pending = wiersze Konsultacje gdzie Status=oczekuje i token niepusty
-        ws_k = _get_ws(sp, "Konsultacje", SHEET_KONSULTACJE_HEADERS)
+        # ── Konsultacje oczekujące ──
+        ws_k   = _get_ws(sp, "Konsultacje", SHEET_KONSULTACJE_HEADERS)
         rows_k = ws_k.get_all_records()
-        pending = [
-            {
-                "token":   r.get("Token",""),
-                "imie":    r.get("Imię","?"),
-                "email":   r.get("Email",""),
-                "telefon": r.get("Telefon","—"),
-                "zabieg":  r.get("Zabieg",""),
-                "termin":  r.get("Termin",""),
-            }
-            for r in rows_k
-            if r.get("Status") == "oczekuje" and r.get("Token","")
-        ]
+
+        pending = []
+        for r in rows_k:
+            # Warunek: Status=oczekuje i token niepusty
+            if r.get("Status", "").strip() == "oczekuje" and r.get("Token", "").strip():
+                pending.append({
+                    "token":   r.get("Token", "").strip(),
+                    "imie":    r.get("Imię", "?"),
+                    "email":   r.get("Email", ""),
+                    "telefon": r.get("Telefon", "—"),
+                    "zabieg":  r.get("Zabieg", ""),
+                    "termin":  r.get("Termin", ""),
+                })
+
         return slots, pending
     except Exception:
         return [], []
@@ -675,7 +696,6 @@ def save_slot(termin: str, status: str = "wolny", zabieg: str = ""):
             if r.get("Termin") == termin:
                 ws.update(f"D{i}", [[status]])
                 return
-        # Nowy slot
         ws.append_row([
             datetime.now().strftime("%Y-%m-%d %H:%M"),
             termin, zabieg, status, "", "", "", "", "",
@@ -685,9 +705,7 @@ def save_slot(termin: str, status: str = "wolny", zabieg: str = ""):
 
 
 def save_booking_to_slot(termin: str, booking: dict):
-    """
-    Wpisuje dane rezerwacji do wiersza Terminy (zamiast osobnego arkusza Rezerwacje).
-    """
+    """Wpisuje dane rezerwacji do wiersza Terminy (Status=zarezerwowany)."""
     try:
         sp = get_spreadsheet()
         if not sp:
@@ -711,16 +729,16 @@ def save_booking_to_slot(termin: str, booking: dict):
 
 def update_booking_status(token: str, new_status: str):
     """
-    Aktualizuje status w arkuszu Konsultacje (kolumna Status) po tokenie.
-    Dodatkowo zwalnia lub blokuje slot w Terminy.
+    Aktualizuje Status w Konsultacje po tokenie.
+    Aktualizuje Status slotu w Terminy po tokenie.
     """
     try:
         sp = get_spreadsheet()
         if not sp:
             return
 
-        # -- Konsultacje --
-        ws_k = _get_ws(sp, "Konsultacje", SHEET_KONSULTACJE_HEADERS)
+        # ── Konsultacje ──
+        ws_k      = _get_ws(sp, "Konsultacje", SHEET_KONSULTACJE_HEADERS)
         headers_k = ws_k.row_values(1)
         try:
             status_col_k = headers_k.index("Status") + 1
@@ -735,8 +753,8 @@ def update_booking_status(token: str, new_status: str):
                 ws_k.update(f"{chr(64+status_col_k)}{row_idx}", [[new_status]])
                 break
 
-        # -- Terminy – aktualizuj status slotu --
-        ws_t = _get_ws(sp, "Terminy", SHEET_TERMINY_HEADERS)
+        # ── Terminy ──
+        ws_t  = _get_ws(sp, "Terminy", SHEET_TERMINY_HEADERS)
         all_t = ws_t.get_all_values()
         for row_idx, row in enumerate(all_t[1:], start=2):
             cell_token = row[4] if len(row) > 4 else ""  # kolumna E = Token
@@ -829,7 +847,8 @@ def render_owner_panel():
             unsafe_allow_html=True
         )
 
-        # ── REZERWACJE DO POTWIERDZENIA – na górze, najważniejsze ──
+        # ── REZERWACJE DO POTWIERDZENIA ──
+        # NAPRAWA 3: pending działa bo token jest teraz poprawnie zapisywany w Konsultacje
         pending = st.session_state.get("pending_bookings", [])
         if pending:
             st.markdown(
@@ -854,29 +873,41 @@ def render_owner_panel():
                 c1, c2 = st.columns(2)
                 with c1:
                     st.markdown('<div class="btn-confirm">', unsafe_allow_html=True)
-                    if st.button("✓ Potwierdź", key=f"ok_{i}", use_container_width=True):
+                    if st.button("✓ Potwierdź", key=f"ok_{b.get('token','')[:8]}_{i}", use_container_width=True):
                         update_booking_status(b.get("token",""), "potwierdzona")
                         for s in st.session_state.get("available_slots", []):
                             if s["termin"] == b.get("termin"):
                                 s["zajety"] = True
                         send_status_email(b, confirmed=True)
-                        st.session_state.pending_bookings.pop(i)
+                        st.session_state.pending_bookings = [
+                            x for x in st.session_state.pending_bookings
+                            if x.get("token") != b.get("token")
+                        ]
                         st.rerun()
                     st.markdown('</div>', unsafe_allow_html=True)
                 with c2:
                     st.markdown('<div class="btn-reject">', unsafe_allow_html=True)
-                    if st.button("✗ Odrzuć", key=f"no_{i}", use_container_width=True):
+                    if st.button("✗ Odrzuć", key=f"no_{b.get('token','')[:8]}_{i}", use_container_width=True):
                         update_booking_status(b.get("token",""), "odrzucona")
                         for s in st.session_state.get("available_slots", []):
                             if s["termin"] == b.get("termin"):
                                 s["zajety"] = False
                         send_status_email(b, confirmed=False)
-                        st.session_state.pending_bookings.pop(i)
+                        st.session_state.pending_bookings = [
+                            x for x in st.session_state.pending_bookings
+                            if x.get("token") != b.get("token")
+                        ]
                         st.rerun()
                     st.markdown('</div>', unsafe_allow_html=True)
 
             st.markdown('<div style="height:1px;background:#e6e4dc;margin:10px 0 14px;"></div>',
                         unsafe_allow_html=True)
+        else:
+            st.markdown(
+                '<div style="font-size:0.78rem;color:#aaa;margin-bottom:14px;">'
+                'Brak oczekujących rezerwacji.</div>',
+                unsafe_allow_html=True
+            )
 
         # ── Dodaj termin ──
         st.markdown('<div style="font-size:0.8rem;font-weight:600;color:#1c1c1a;margin-bottom:8px;">Dodaj termin</div>',
@@ -1057,6 +1088,8 @@ def render_chat():
                 unsafe_allow_html=True)
 
     # ── Historia wiadomości ──
+    # NAPRAWA 1: filtrujemy wiadomości asystenta zawierające surowy email klientki
+    # — odpowiedź po podaniu emaila nie zawiera już adresu w treści (poprawiona w conversation_next)
     for msg in messages:
         avatar = "🌿" if msg["role"] == "assistant" else "👤"
         with st.chat_message(msg["role"], avatar=avatar):
@@ -1064,14 +1097,9 @@ def render_chat():
 
     current_stage = conv_state.get("stage", STAGE_GREETING)
 
-    # ── FIX SCROLL: kotwica na dole listy wiadomości ──
-    # Renderujemy niewidoczny element i scrollujemy do niego przez JS
-    # tylko gdy pojawią się nowe wiadomości (nie przy wyborze terminów)
     st.markdown('<div id="chat-bottom-anchor"></div>', unsafe_allow_html=True)
 
     # ── Wybór terminów ──
-    # FIX SCROLL: blok terminów renderuje się PO kotwicy — nie powoduje skoku,
-    # bo chat_input jest PONIŻEJ i Streamlit nie scrolluje do niego gdy jest ukryty
     if current_stage == STAGE_SLOTS and not saved and not st.session_state.get("slot_chosen"):
 
         available = [
@@ -1145,7 +1173,6 @@ def render_chat():
     if can_save:
         st.markdown('<div style="height:1px;background:#e6e4dc;margin:1.5rem 0 1rem;"></div>',
                     unsafe_allow_html=True)
-        # FIX 2: zamiast st.success (zielony boks na środku) — złota karta z neutralnym tekstem
         st.markdown("""
         <div style="background:#fdf3d8;border:1px solid rgba(212,168,67,0.45);border-radius:12px;
                     padding:1.1rem 1.4rem;margin-bottom:1rem;display:flex;align-items:center;gap:14px;">
@@ -1180,22 +1207,19 @@ def render_chat():
                         "podsumowanie": info.get("podsumowanie",""),
                     }
                     st.session_state.setdefault("pending_bookings", []).append(booking)
-                    # FIX SHEETS: zapisujemy dane rezerwacji do wiersza Terminy
                     save_booking_to_slot(slot_chosen, booking)
 
-                # Zapisz konsultację do arkusza Konsultacje
+                # NAPRAWA 3: save_consultation zapisuje token — pending działa
                 save_consultation(procedure, info, messages)
-                # Wyślij maile
                 send_consultation_emails(procedure, info)
 
-                # FIX 2: zapisz wynik i rerun — ekran "saved" zastępuje CTA
                 st.session_state.saved        = True
                 st.session_state._save_email  = info.get("email","")
                 st.session_state._save_termin = slot_chosen or ""
                 st.rerun()
             st.markdown('</div>', unsafe_allow_html=True)
 
-    # ── FIX 2: Ekran po zapisie — elegancki, BEZ zielonego boksiku ──
+    # ── Ekran po zapisie ──
     if saved:
         email_done  = st.session_state.get("_save_email","")
         termin_done = st.session_state.get("_save_termin","")
@@ -1206,7 +1230,7 @@ def render_chat():
           <div style="font-family:'Cormorant Garamond',serif;font-size:1.5rem;font-weight:500;
                       color:#1c1c1a;margin-bottom:8px;">Rezerwacja zapisana</div>
           {'<div style="font-size:0.88rem;color:#555;margin-bottom:4px;">Termin: <strong>' + termin_done + '</strong> — czeka na potwierdzenie specjalistki.</div>' if termin_done else ''}
-          {'<div style="font-size:0.86rem;color:#888;">Potwierdzenie wyślemy na <strong>' + email_done + '</strong></div>' if email_done else ''}
+          {'<div style="font-size:0.86rem;color:#888;">Potwierdzenie wyślemy na wskazany adres email.</div>' if email_done else ''}
         </div>
         """, unsafe_allow_html=True)
         _, col_new, _ = st.columns([1, 2, 1])
@@ -1219,15 +1243,12 @@ def render_chat():
                 st.rerun()
 
     # ── Input czatu ──
-    # FIX SCROLL: nie renderujemy chat_input podczas etapu SLOTS
-    # — to główna przyczyna scrollowania (Streamlit focusuje chat_input przy rerun)
     _block_input = (
         current_stage == STAGE_SLOTS
         or current_stage == STAGE_DONE
         or saved
     )
 
-    # Gdy slot wybrany i czekamy na email — formularz zamiast chat_input (brak scroll-jump)
     _slot_email_mode = (
         bool(slot_chosen)
         and current_stage == STAGE_EMAIL
